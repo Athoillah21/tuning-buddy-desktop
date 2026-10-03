@@ -1,0 +1,53 @@
+{% load explorer %}{% include 'advisor/explorer/panels/_crumbs.html' with schema='' %}
+<div class="panel-header">
+    <div>
+        <h2 class="panel-title">{{ database }}</h2>
+        <p class="card-description">Database on {{ connection.name }}</p>
+    </div>
+    <div class="panel-actions">
+        <a class="btn btn-secondary" data-nav href="{% explorer_href c=connection.pk db=database kind='query' %}">Query tool</a>
+    </div>
+</div>
+
+<div class="stat-grid">
+    <div class="stat-tile"><span class="stat-label">Size on disk</span><span class="stat-value">{{ overview.total_bytes|filesizeformat }}</span></div>
+    <div class="stat-tile"><span class="stat-label">PostgreSQL</span><span class="stat-value">{{ overview.version }}</span></div>
+    <div class="stat-tile"><span class="stat-label">Schemas</span><span class="stat-value">{{ overview.schemas|length }}</span></div>
+    <div class="stat-tile"><span class="stat-label">Tables</span><span class="stat-value">{{ overview.tables|length }}</span></div>
+    <div class="stat-tile"><span class="stat-label">Connected as</span><span class="stat-value">{{ overview.user }}</span>
+        {% if overview.is_superuser %}<span class="tag tag-warning" title="Superusers can read server files through functions, even read-only">superuser</span>{% endif %}</div>
+</div>
+
+<div class="panel-split">
+    <div class="card">
+        <div class="card-header"><h3 class="card-header-title">Schemas</h3></div>
+        <div class="card-content schema-list">
+            {% for s in overview.schemas %}
+            <a class="schema-chip" data-nav data-reveal href="{% explorer_href c=connection.pk db=database schema=s.name kind='schema' %}">
+                <strong>{{ s.name }}</strong>
+                <span class="card-description">{{ s.tables }} tables · {{ s.total_bytes|filesizeformat }}</span>
+            </a>
+            {% empty %}
+            <span class="card-description">No schemas with tables.</span>
+            {% endfor %}
+        </div>
+    </div>
+    <div class="card">
+        <div class="card-header"><h3 class="card-header-title">Extensions</h3></div>
+        <div class="card-content">
+            {% for ext in overview.extensions %}
+            <span class="tag tag-accent">{{ ext.name }} {{ ext.version }}</span>
+            {% empty %}
+            <span class="card-description">None</span>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header">
+        <h3 class="card-header-title">Tables</h3>
+        <span class="card-description">Largest first · row counts are planner estimates · click a column to sort</span>
+    </div>
+    {% include 'advisor/explorer/panels/_tables_table.html' with tables=overview.tables show_schema=True %}
+</div>

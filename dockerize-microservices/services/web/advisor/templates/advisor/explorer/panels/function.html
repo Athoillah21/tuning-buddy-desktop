@@ -1,0 +1,26 @@
+{% load explorer %}{% include 'advisor/explorer/panels/_crumbs.html' with schema=detail.schema crumb_group='functions' crumb_group_label='Functions' crumb_last=detail.name %}
+<div class="panel-header">
+    <div>
+        <h2 class="panel-title">{{ detail.name }}<span class="panel-title-args">({{ detail.arguments }})</span></h2>
+        <p class="card-description">{{ detail.kind }} in {{ detail.schema }} · owner {{ detail.owner }}</p>
+        {% if detail.description %}<p class="card-description">{{ detail.description }}</p>{% endif %}
+    </div>
+</div>
+
+<div class="stat-grid">
+    <div class="stat-tile"><span class="stat-label">Returns</span><span class="stat-value mono-value">{{ detail.returns|default:"—" }}</span></div>
+    <div class="stat-tile"><span class="stat-label">Language</span><span class="stat-value">{{ detail.language }}</span></div>
+    <div class="stat-tile"><span class="stat-label">Volatility</span><span class="stat-value">{{ detail.volatility }}</span></div>
+    <div class="stat-tile"><span class="stat-label">Parallel</span><span class="stat-value">{{ detail.parallel }}</span></div>
+    <div class="stat-tile"><span class="stat-label">Cost / rows</span><span class="stat-value">{{ detail.cost }} / {{ detail.rows }}</span></div>
+</div>
+<p class="card-description" style="margin-bottom: 12px;">
+    {% if detail.security_definer %}<span class="tag tag-warning">security definer</span>{% endif %}
+    {% if detail.is_strict %}<span class="tag">strict</span>{% endif %}
+    {% if detail.volatility == 'volatile' %}A volatile function cannot be used in an index expression, and the planner calls it once per row.{% endif %}
+</p>
+
+<div class="card">
+    <div class="ddl-toolbar"><span class="card-description">Definition</span><button class="btn btn-sm btn-secondary" data-copy="#ddl-text">Copy</button></div>
+    <pre class="ddl-output" id="ddl-text">{{ detail.definition }}</pre>
+</div>

@@ -1,0 +1,160 @@
+{% extends 'advisor/base.html' %}
+
+{% block title %}Dashboard{% endblock %}
+{% block page_title %}Dashboard{% endblock %}
+
+{% block header_actions %}
+<a href="{% url 'advisor:explorer' %}?kind=connection_add" class="btn btn-primary">
+    <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <line x1="12" y1="5" x2="12" y2="19" />
+        <line x1="5" y1="12" x2="19" y2="12" />
+    </svg>
+    Add Connection
+</a>
+{% endblock %}
+
+{% block content %}
+{% if demo_connection %}
+<div class="demo-banner" id="demo-banner" hidden>
+    <svg class="demo-banner-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <ellipse cx="12" cy="5" rx="9" ry="3" />
+        <path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3" />
+        <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5" />
+    </svg>
+    <span>The demo database is ready.</span>
+    <a href="{% url 'advisor:test_cases' %}?connection={{ demo_connection.id }}">Run the {{ test_case_count }} test cases →</a>
+    <button class="demo-banner-close" id="demo-banner-close" title="Close" aria-label="Close">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="18" y1="6" x2="6" y2="18" />
+            <line x1="6" y1="6" x2="18" y2="18" />
+        </svg>
+    </button>
+</div>
+{% endif %}
+
+<div class="stat-grid dashboard-stats">
+    <a class="stat-tile stat-link" href="{% url 'advisor:explorer' %}">
+        <span class="stat-label">Connections</span>
+        <span class="stat-value">{{ stats.connections }}</span>
+    </a>
+    <a class="stat-tile stat-link" href="{% url 'advisor:query_history' %}">
+        <span class="stat-label">Analyses</span>
+        <span class="stat-value">{{ stats.completed }}
+            {% if stats.failed %}<span class="stat-muted">· {{ stats.failed }} failed</span>{% endif %}
+        </span>
+    </a>
+    <div class="stat-tile" title="Median improvement of the best tested option, over recent analyses with a significant result">
+        <span class="stat-label">Typical gain</span>
+        <span class="stat-value">
+            {% if stats.median_gain is not None %}{{ stats.median_gain|floatformat:0 }}% faster
+            <span class="stat-muted">· {{ stats.gain_samples }} analyses</span>
+            {% else %}<span class="stat-muted">no results yet</span>{% endif %}
+        </span>
+    </div>
+    <a class="stat-tile stat-link" href="{% url 'advisor:ai_settings' %}">
+        <span class="stat-label">AI provider</span>
+        <span class="stat-value">
+            {% if stats.ai_provider %}
+            <span class="ai-status-dot ai-status-dot-ready"></span> {{ stats.ai_provider.name }}
+            {% if stats.ai_healthy_count > 1 %}<span class="stat-muted">+{{ stats.ai_healthy_count|add:"-1" }}</span>{% endif %}
+            {% else %}
+            <span class="ai-status-dot ai-status-dot-locked"></span> <span class="stat-muted">not verified</span>
+            {% endif %}
+        </span>
+    </a>
+</div>
+
+<div class="dashboard-columns">
+    <div class="card">
+        <div class="card-header">
+            <h3 class="card-header-title">
+                <svg class="card-header-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <ellipse cx="12" cy="5" rx="9" ry="3" />
+                    <path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3" />
+                    <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5" />
+                </svg>
+                Connections
+            </h3>
+            <a href="{% url 'advisor:explorer' %}" class="card-header-link">View all</a>
+        </div>
+        <div class="card-content">
+            {% if connections %}
+            <div class="connection-list">
+                {% for conn in connections %}
+                <div class="connection-item">
+                    <div class="connection-info">
+                        <span class="connection-name">{{ conn.name }}</span>
+                        <span class="connection-db">{{ conn.database }}</span>
+                    </div>
+                    <div class="connection-actions">
+                        <a href="{% url 'advisor:analyze_query' conn.id %}" class="btn btn-sm btn-secondary">Analyze</a>
+                        <a href="{% url 'advisor:explorer' %}?c={{ conn.id }}" class="btn btn-sm btn-ghost">Explore</a>
+                        <a href="{% url 'advisor:test_cases' %}?connection={{ conn.id }}" class="btn btn-sm btn-ghost">Test</a>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <div class="empty-state">
+                <p>No connections yet.</p>
+                <a href="{% url 'advisor:explorer' %}?kind=connection_add" class="btn btn-primary btn-sm">Add your first connection</a>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header">
+            <h3 class="card-header-title">
+                <svg class="card-header-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="10" />
+                    <polyline points="12 6 12 12 16 14" />
+                </svg>
+                Recent analyses
+            </h3>
+            <a href="{% url 'advisor:query_history' %}" class="card-header-link">View all</a>
+        </div>
+        <div class="card-content">
+            {% if recent_queries %}
+            <div class="query-list">
+                {% for query in recent_queries %}
+                <a href="{% url 'advisor:view_results' query.id %}" class="query-item">
+                    <div class="query-preview">{{ query.original_query|truncatechars:70 }}</div>
+                    <div class="query-meta">
+                        <span class="query-status status-{{ query.analysis_status }}">{{ query.analysis_status }}</span>
+                        {% if query.original_execution_time %}
+                        <span class="query-time">{{ query.original_execution_time|floatformat:2 }} ms</span>
+                        {% endif %}
+                        <span class="query-time">{{ query.created_at|date:"M d, H:i" }}</span>
+                    </div>
+                </a>
+                {% endfor %}
+            </div>
+            {% else %}
+            <div class="empty-state">
+                <p>No queries analyzed yet.</p>
+                <p class="empty-state-hint">Pick a connection and click Analyze.</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+{% if demo_connection %}
+<script>
+    (function () {
+        const banner = document.getElementById('demo-banner');
+        const KEY = 'tb.demoBannerDismissed';
+        let dismissed = false;
+        try { dismissed = localStorage.getItem(KEY) === '1'; } catch (e) { /* storage blocked: show it */ }
+        banner.hidden = dismissed;
+        document.getElementById('demo-banner-close').addEventListener('click', () => {
+            banner.hidden = true;
+            try { localStorage.setItem(KEY, '1'); } catch (e) { /* closes for this visit only */ }
+        });
+    })();
+</script>
+{% endif %}
+{% endblock %}

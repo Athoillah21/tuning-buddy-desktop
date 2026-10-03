@@ -1,0 +1,49 @@
+{% load explorer %}{% include 'advisor/explorer/panels/_crumbs.html' with crumb_last=group_label %}
+<div class="panel-header">
+    <div>
+        <h2 class="panel-title">{{ group_label }}</h2>
+        <p class="card-description">{{ objects|length }} in {{ schema }}{% if group == 'functions' or group == 'views' or group == 'types' %} · objects created by extensions are not listed{% endif %}</p>
+    </div>
+    {% if group == 'tables' %}
+    <div class="panel-actions">
+        <a class="btn btn-primary" href="{% url 'advisor:datagen' %}?c={{ connection.pk }}&db={{ database|urlencode }}&schema={{ schema|urlencode }}">Generate data</a>
+    </div>
+    {% endif %}
+</div>
+
+<div class="card">
+{% if group == 'tables' %}
+    {% include 'advisor/explorer/panels/_tables_table.html' with tables=objects %}
+{% else %}
+    <div class="table-scroll">
+        <table class="data-table sortable-table">
+            <thead><tr>
+                <th class="sortable" data-type="text">Name</th>
+                {% if group == 'functions' %}<th>Kind</th><th>Arguments</th><th>Returns</th><th>Language</th>
+                {% elif group == 'types' %}<th>Kind</th>
+                {% else %}<th>Owner</th><th class="sortable num" data-type="num">Size</th><th>Description</th>{% endif %}
+            </tr></thead>
+            <tbody>
+                {% for obj in objects %}
+                <tr>
+                    <td data-value="{{ obj.name }}">
+                        <a data-nav data-reveal href="{% if group == 'functions' %}{% explorer_href c=connection.pk db=database schema=schema kind=object_kind name=obj.name oid=obj.oid %}{% else %}{% explorer_href c=connection.pk db=database schema=schema kind=object_kind name=obj.name %}{% endif %}"><strong>{{ obj.name }}</strong></a>
+                    </td>
+                    {% if group == 'functions' %}
+                    <td>{{ obj.kind }}</td><td class="mono">{{ obj.arguments }}</td><td class="mono">{{ obj.returns }}</td><td>{{ obj.language }}</td>
+                    {% elif group == 'types' %}
+                    <td>{{ obj.kind }}</td>
+                    {% else %}
+                    <td>{{ obj.owner }}</td>
+                    <td class="num" data-value="{{ obj.total_bytes|default:0 }}">{{ obj.total_bytes|filesizeformat }}</td>
+                    <td class="card-description">{{ obj.description|default:"" }}</td>
+                    {% endif %}
+                </tr>
+                {% empty %}
+                <tr><td colspan="5" class="card-description">None in this schema.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+{% endif %}
+</div>

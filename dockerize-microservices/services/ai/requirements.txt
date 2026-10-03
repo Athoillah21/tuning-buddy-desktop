@@ -1,0 +1,15 @@
+fastapi>=0.110
+uvicorn[standard]>=0.29
+pydantic>=2.6
+sqlalchemy>=2.0
+psycopg2-binary>=2.9
+cryptography>=41.0
+httpx>=0.27
+
+# AI provider SDKs
+anthropic>=1.5,<2
+openai>=1.40,<4
+google-genai>=1.0,<3
+
+# Tests (docker compose run --rm ai pytest)
+pytest>=8.0

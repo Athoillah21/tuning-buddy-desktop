@@ -1,0 +1,138 @@
+name: tuning-buddy
+
+services:
+  # App database (tuning_web for the web service, tuning_ai for the AI service)
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-tuning}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-tuning}
+      POSTGRES_DB: postgres
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./infra/postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+
+  ai:
+    build: ./services/ai
+    environment:
+      AI_DATABASE_URL: postgresql+psycopg2://${POSTGRES_USER:-tuning}:${POSTGRES_PASSWORD:-tuning}@postgres:5432/tuning_ai
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:?Set ENCRYPTION_KEY in .env}
+      AI_HEALTH_CHECK_TIMEOUT: ${AI_HEALTH_CHECK_TIMEOUT:-30}
+      AI_REQUEST_TIMEOUT: ${AI_REQUEST_TIMEOUT:-300}
+      AI_MAX_TOKENS: ${AI_MAX_TOKENS:-8192}
+    ports:
+      - "127.0.0.1:8002:8002"
+    extra_hosts:
+      # Lets providers point at Ollama / LM Studio running on the host machine
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck: &python-healthcheck
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8002/health', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    restart: unless-stopped
+
+  analyzer:
+    build: ./services/analyzer
+    environment:
+      AI_SERVICE_URL: http://ai:8002
+      QUERY_EXECUTION_TIMEOUT: ${QUERY_EXECUTION_TIMEOUT:-300}
+      DB_CONNECTION_TIMEOUT: ${DB_CONNECTION_TIMEOUT:-5}
+      MEASUREMENT_REPEATS: ${MEASUREMENT_REPEATS:-3}
+      NOISE_FLOOR_MS: ${NOISE_FLOOR_MS:-5}
+    ports:
+      - "127.0.0.1:8001:8001"
+    extra_hosts:
+      # Lets users analyze databases running on the host machine
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      ai:
+        condition: service_healthy
+    healthcheck:
+      <<: *python-healthcheck
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8001/health', timeout=3)"]
+    restart: unless-stopped
+
+  report:
+    build: ./services/report
+    ports:
+      - "127.0.0.1:8003:8003"
+    healthcheck:
+      <<: *python-healthcheck
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8003/health', timeout=3)"]
+    restart: unless-stopped
+
+  web:
+    build: ./services/web
+    environment:
+      SECRET_KEY: ${SECRET_KEY:?Set SECRET_KEY in .env}
+      DEBUG: ${DEBUG:-False}
+      DATABASE_URL: postgres://${POSTGRES_USER:-tuning}:${POSTGRES_PASSWORD:-tuning}@postgres:5432/tuning_web
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:?Set ENCRYPTION_KEY in .env}
+      AI_SERVICE_URL: http://ai:8002
+      ANALYZER_URL: http://analyzer:8001
+      REPORT_URL: http://report:8003
+      PASSWORD_EXPIRY_HOURS: ${PASSWORD_EXPIRY_HOURS:-1}
+      ALLOWED_HOSTS: localhost,127.0.0.1
+      CSRF_TRUSTED_ORIGINS: http://localhost:8000,http://127.0.0.1:8000
+    ports:
+      - "127.0.0.1:8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      ai:
+        condition: service_healthy
+      analyzer:
+        condition: service_healthy
+      report:
+        condition: service_healthy
+    healthcheck:
+      <<: *python-healthcheck
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/healthz/', timeout=3)"]
+      start_period: 30s
+    restart: unless-stopped
+
+  # Optional: local LLMs. `docker compose --profile ollama up -d`
+  ollama:
+    image: ollama/ollama:latest
+    profiles: ["ollama"]
+    volumes:
+      - ollama-models:/root/.ollama
+    ports:
+      - "127.0.0.1:11434:11434"
+    restart: unless-stopped
+
+  # Optional: sample database to analyze, with PostGIS and pgvector for the benchmark
+  # suite. `docker compose --profile demo up -d --build sampledb`
+  sampledb:
+    build: ./infra/sampledb
+    profiles: ["demo"]
+    environment:
+      POSTGRES_USER: demo
+      POSTGRES_PASSWORD: demo
+      POSTGRES_DB: shop
+    volumes:
+      # Named explicitly: the postgres image declares an anonymous volume for its data
+      # directory, which compose reuses on recreate - so seeds would silently be skipped.
+      # Reset the demo data with: docker compose --profile demo down -v
+      - sampledb-data:/var/lib/postgresql/data
+      # Seeds run in filename order on first start: shop -> large_orders -> spatial -> vector
+      - ./infra/sampledb/init:/docker-entrypoint-initdb.d:ro
+    ports:
+      - "127.0.0.1:5433:5432"
+    restart: unless-stopped
+
+volumes:
+  postgres-data:
+  ollama-models:
+  sampledb-data:

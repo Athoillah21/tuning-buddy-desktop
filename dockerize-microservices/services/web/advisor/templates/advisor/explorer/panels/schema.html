@@ -1,0 +1,36 @@
+{% load explorer %}{% include 'advisor/explorer/panels/_crumbs.html' %}
+<div class="panel-header">
+    <div>
+        <h2 class="panel-title">{{ schema }}</h2>
+        <p class="card-description">Schema in {{ database }}</p>
+    </div>
+    <div class="panel-actions">
+        <a class="btn btn-secondary" data-nav href="{% explorer_href c=connection.pk db=database kind='query' %}">Query tool</a>
+        <a class="btn btn-primary" href="{% url 'advisor:datagen' %}?c={{ connection.pk }}&db={{ database|urlencode }}&schema={{ schema|urlencode }}">
+            <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <ellipse cx="12" cy="5" rx="9" ry="3" /><path d="M3 5v6c0 1.66 4 3 9 3s9-1.34 9-3V5" />
+                <line x1="12" y1="17" x2="12" y2="23" /><line x1="9" y1="20" x2="15" y2="20" />
+            </svg>
+            Generate data
+        </a>
+    </div>
+</div>
+
+<div class="group-chips">
+    {% for key, label, kind in groups %}
+    {% with count=counts|get_item:key %}
+    <a class="group-chip {% if not count %}is-muted{% endif %}" data-nav data-reveal
+       href="{% explorer_href c=connection.pk db=database schema=schema kind='group' group=key %}">
+        {{ label }} <span class="tab-count">{{ count|default:0 }}</span>
+    </a>
+    {% endwith %}
+    {% endfor %}
+</div>
+
+<div class="card">
+    <div class="card-header">
+        <h3 class="card-header-title">Tables</h3>
+        <span class="card-description">Tables marked <span class="tag">empty</span> can be filled with test data: <em>Generate data</em>.</span>
+    </div>
+    {% include 'advisor/explorer/panels/_tables_table.html' %}
+</div>

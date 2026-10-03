@@ -1,0 +1,426 @@
+{% extends 'advisor/base.html' %}
+
+{% block title %}Generate test data{% endblock %}
+{% block page_title %}Generate test data{% endblock %}
+
+{% block header_actions %}
+{% if back_url %}<a href="{{ back_url }}" class="btn btn-ghost">Back to Databases</a>{% endif %}
+{% endblock %}
+
+{% block content %}
+{% csrf_token %}
+{% if error %}
+<div class="message message-error">{{ error }}</div>
+{% else %}
+<div class="card datagen-intro">
+    <div>
+        <h3 class="card-header-title">{{ schema }} in {{ database }}</h3>
+        <p class="card-description">
+            Fill tables with realistic test data, for example a production schema you restored without its data.
+            Values follow each column's type and name, and respect primary and foreign keys, unique columns,
+            simple CHECK constraints, enums and partitions. Parent tables are filled before the tables that refer
+            to them, and every table is ANALYZEd at the end so the planner sees real statistics.
+        </p>
+    </div>
+    <div class="datagen-setall">
+        <label class="card-description" for="set-all-size">Set all ticked tables to</label>
+        <input type="number" id="set-all-size" class="form-input" min="1" step="1" value="100">
+        <select id="set-all-unit" class="form-select"><option value="MB">MB</option><option value="GB">GB</option></select>
+        <button class="btn btn-secondary" id="set-all">Apply</button>
+    </div>
+</div>
+
+<div class="card" id="plan-card">
+    <div class="card-header">
+        <h3 class="card-header-title">Tables</h3>
+        <span class="card-description" id="order-line"></span>
+    </div>
+    <div id="plan-body">
+        <div class="panel-loading"><div class="loading-spinner"></div></div>
+        <p class="card-description" style="text-align: center; padding-bottom: 24px;">Reading the tables and their constraints…</p>
+    </div>
+</div>
+
+<div class="card datagen-safety" id="safety" hidden>
+    <div class="card-header">
+        <h3 class="card-header-title">Before you start</h3>
+    </div>
+    <div class="datagen-safety-body">
+        <div class="datagen-remote" id="safety-remote" hidden>
+            <div class="message message-error">
+                <strong>{{ host }} is not this computer.</strong> Generating data writes gigabytes into this database.
+                Only continue if it is a test or staging copy, never a production database.
+            </div>
+            <ul class="signal-list" id="signals"></ul>
+            <label class="modal-check"><input type="checkbox" id="confirm-not-production">
+                I confirm "{{ database }}" is not a production database</label>
+        </div>
+
+        <div class="datagen-footer">
+            <div class="form-group datagen-confirm">
+                <label class="form-label" for="confirm-name">Type <code>{{ database }}</code> to confirm</label>
+                <div class="datagen-confirm-input">
+                    <input type="text" id="confirm-name" class="form-input" autocomplete="off" spellcheck="false"
+                           placeholder="{{ database }}">
+                    <span class="datagen-confirm-ok" id="confirm-ok" hidden title="Name matches">✓</span>
+                </div>
+                <span class="form-hint">The database these tables are in, so data never goes to the wrong one.</span>
+            </div>
+            <div class="datagen-submit">
+                <span class="datagen-total" id="total-line"></span>
+                <button class="btn btn-primary btn-lg" id="generate" disabled>
+                    <svg class="btn-icon" viewBox="0 0 24 24" fill="currentColor" stroke="none"><polygon points="6 4 20 12 6 20 6 4" /></svg>
+                    Generate data
+                </button>
+                <div class="message message-error datagen-start-error" id="start-error" hidden></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Progress, the same look as the Analyze page -->
+<div class="loading-overlay" id="progress" style="display: none;">
+    <div class="loading-content loading-content-wide">
+        <div class="loading-spinner" id="progress-spinner"></div>
+        <h3 id="progress-title">Generating test data…</h3>
+        <p id="progress-subtitle">Preparing</p>
+        <div class="loading-steps" id="progress-steps"></div>
+        <div class="loading-progress">
+            <div class="loading-progress-bar"><span id="progress-bar" style="width: 0%"></span></div>
+            <span class="loading-meta" id="progress-meta"></span>
+        </div>
+        <div class="loading-actions" id="progress-running-actions">
+            <button class="btn btn-secondary" id="cancel">Cancel</button>
+        </div>
+        <div class="loading-actions" id="progress-done-actions" hidden>
+            <a class="btn btn-primary" href="{{ back_url }}">Open in Databases</a>
+            {% if database == connection.database %}
+            <a class="btn btn-secondary" href="{% url 'advisor:analyze_query' connection.pk %}">Analyze a query</a>
+            {% endif %}
+            <button class="btn btn-ghost" id="close-progress">Close</button>
+        </div>
+    </div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block extra_js %}
+{% if not error %}
+<script>
+(function () {
+    const CONNECTION = {{ connection.pk }};
+    const DATABASE = "{{ database|escapejs }}";
+    const SCHEMA = "{{ schema|escapejs }}";
+    const PRESELECT = JSON.parse('{{ preselect_json|escapejs }}');
+    const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]').value;
+    const MB = 1024 * 1024;
+    const planBody = document.getElementById('plan-body');
+    const generateButton = document.getElementById('generate');
+    const confirmName = document.getElementById('confirm-name');
+    const confirmProduction = document.getElementById('confirm-not-production');
+    let plan = null, remote = false, rows = [];
+
+    function el(tag, className, text) {
+        const node = document.createElement(tag);
+        if (className) node.className = className;
+        if (text !== undefined) node.textContent = text;
+        return node;
+    }
+
+    function bytes(value) {
+        if (value === null || value === undefined) return '—';
+        const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+        let i = 0;
+        while (value >= 1024 && i < units.length - 1) { value /= 1024; i++; }
+        return (i ? value.toFixed(value < 10 ? 1 : 0) : value) + ' ' + units[i];
+    }
+
+    function count(value) {
+        if (value >= 1e9) return (value / 1e9).toFixed(1) + 'B';
+        if (value >= 1e6) return (value / 1e6).toFixed(1) + 'M';
+        if (value >= 1e3) return (value / 1e3).toFixed(1) + 'k';
+        return String(Math.round(value));
+    }
+
+    async function post(url, body) {
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrfToken, 'X-Requested-With': 'XMLHttpRequest'},
+            body: JSON.stringify(Object.assign({c: CONNECTION, db: DATABASE, schema: SCHEMA}, body)),
+        });
+        return response.json();
+    }
+
+    // -----------------------------------------------------------------
+    // The table list
+    // -----------------------------------------------------------------
+    function targetBytes(row) {
+        const size = parseFloat(row.size.value);
+        return row.check.checked && size > 0 ? Math.round(size * (row.unit.value === 'GB' ? 1024 * MB : MB)) : 0;
+    }
+
+    function renderPlan() {
+        const table = el('table', 'data-table datagen-table');
+        table.createTHead().innerHTML = '<tr><th></th><th>Table</th><th class="num">Now</th><th>Data to add</th><th class="num">≈ Rows</th><th>Notes</th></tr>';
+        const body = table.createTBody();
+        rows = plan.tables.map(info => {
+            const tr = body.insertRow();
+            const check = el('input');
+            check.type = 'checkbox';
+            check.checked = PRESELECT.length ? PRESELECT.includes(info.name) : info.is_empty;
+            tr.insertCell().appendChild(check);
+
+            const nameCell = tr.insertCell();
+            nameCell.appendChild(el('strong', '', info.name));
+            if (info.kind !== 'table') nameCell.appendChild(el('span', 'tag tag-accent', info.partition ? `partitioned · ${info.partition.count}` : info.kind));
+            if (info.is_empty) nameCell.appendChild(el('span', 'tag', 'empty'));
+            const details = el('details', 'datagen-columns');
+            details.appendChild(el('summary', '', `${info.columns.length} columns`));
+            const list = el('ul');
+            info.columns.forEach(column => {
+                const li = el('li');
+                li.append(el('code', '', column.name), el('span', 'card-description', ` ${column.type} — ${column.how}`));
+                list.appendChild(li);
+            });
+            details.appendChild(list);
+            nameCell.appendChild(details);
+
+            tr.insertCell().outerHTML = `<td class="num">${info.is_empty ? '<span class="card-description">empty</span>' : count(info.row_estimate) + ' rows<div class="card-description">' + bytes(info.total_bytes) + '</div>'}</td>`;
+
+            // The inputs sit in a wrapper: a table cell turned into a flex box breaks the row layout
+            const sizeCell = tr.insertCell();
+            const sizeBox = el('div', 'datagen-size');
+            sizeCell.appendChild(sizeBox);
+            const size = el('input');
+            size.type = 'number'; size.min = '0'; size.step = '1'; size.value = '100'; size.className = 'form-input';
+            const unit = el('select', 'form-select');
+            unit.innerHTML = '<option value="MB">MB</option><option value="GB">GB</option>';
+            sizeBox.append(size, unit);
+
+            const estimate = tr.insertCell();
+            estimate.className = 'num';
+            const notes = tr.insertCell();
+            notes.className = 'datagen-notes';
+            const row = {info, tr, check, size, unit, estimate, notes};
+            [check, size, unit].forEach(input => input.addEventListener('input', update));
+            check.addEventListener('change', update);
+            return row;
+        });
+        planBody.replaceChildren(el('div', 'table-scroll'));
+        planBody.firstChild.appendChild(table);
+    }
+
+    function problemsFor(row, checkedNames) {
+        const problems = [...row.info.problems];
+        const fixes = [];
+        row.info.parents.forEach(parent => {
+            const parentRow = rows.find(r => r.info.name === parent);
+            if (parentRow && parentRow.info.is_empty && !checkedNames.has(parent) && !row.info.nullable_parents.includes(parent)) {
+                problems.push(`Refers to ${parent}, which is empty.`);
+                fixes.push(parent);
+            }
+        });
+        return {problems, fixes};
+    }
+
+    function update() {
+        const checkedNames = new Set(rows.filter(r => r.check.checked).map(r => r.info.name));
+        let blocking = 0, total = 0, tables = 0;
+        rows.forEach(row => {
+            const target = targetBytes(row);
+            row.tr.classList.toggle('is-off', !row.check.checked);
+            row.size.disabled = row.unit.disabled = !row.check.checked;
+            row.estimate.textContent = target && row.info.bytes_per_row ? count(target / row.info.bytes_per_row) : '—';
+            const {problems, fixes} = row.check.checked ? problemsFor(row, checkedNames) : {problems: [], fixes: []};
+            row.notes.replaceChildren();
+            problems.forEach(p => row.notes.appendChild(el('div', 'datagen-problem', p)));
+            fixes.forEach(parent => {
+                const fix = el('button', 'btn btn-sm btn-ghost', `Tick ${parent}`);
+                fix.addEventListener('click', () => { rows.find(r => r.info.name === parent).check.checked = true; update(); });
+                row.notes.appendChild(fix);
+            });
+            if (row.check.checked) {
+                row.info.notes.forEach(n => row.notes.appendChild(el('div', 'card-description', n)));
+                if (row.info.outside_parents.length) row.notes.appendChild(el('div', 'card-description', `Refers to ${row.info.outside_parents.join(', ')} in another schema; existing rows there are used.`));
+            }
+            if (row.check.checked && target) { total += target; tables++; }
+            if (row.check.checked) blocking += problems.length;
+        });
+        const order = plan.order.filter(name => checkedNames.has(name));
+        document.getElementById('order-line').textContent = order.length ? 'Order: ' + order.join(' → ') : 'Tick the tables to fill';
+        document.getElementById('total-line').textContent = tables
+            ? `${tables} table${tables === 1 ? '' : 's'}, ${bytes(total)} in total` + (blocking ? ` · fix ${blocking} problem${blocking === 1 ? '' : 's'} first` : '')
+            : 'Tick at least one table and give it a size.';
+        const nameMatches = confirmName.value.trim() === DATABASE;
+        document.getElementById('confirm-ok').hidden = !nameMatches;
+        confirmName.classList.toggle('is-valid', nameMatches);
+        const confirmed = nameMatches && (!remote || confirmProduction.checked);
+        generateButton.disabled = !tables || blocking > 0 || !confirmed || plan.signals.is_replica;
+    }
+
+    document.getElementById('set-all').addEventListener('click', () => {
+        const size = document.getElementById('set-all-size').value, unit = document.getElementById('set-all-unit').value;
+        rows.filter(r => r.check.checked).forEach(r => { r.size.value = size; r.unit.value = unit; });
+        update();
+    });
+    confirmName.addEventListener('input', update);
+    if (confirmProduction) confirmProduction.addEventListener('change', update);
+
+    function renderSafety() {
+        const signals = plan.signals;
+        remote = !signals.is_local;
+        document.getElementById('safety').hidden = false;
+        document.getElementById('safety-remote').hidden = !remote;
+        const list = document.getElementById('signals');
+        const items = [
+            [`Database size: ${bytes(signals.database_bytes)}`, signals.database_bytes > 50 * 1024 * MB],
+            [`${signals.other_sessions} other session${signals.other_sessions === 1 ? '' : 's'} connected, ${signals.active_sessions} running a statement`, signals.active_sessions > 0],
+            [signals.replication_clients === null ? 'Replication: cannot be checked with this user' : `${signals.replication_clients} replica${signals.replication_clients === 1 ? '' : 's'} streaming from this server`, signals.replication_clients > 0],
+            [signals.is_replica ? 'This server is a read-only replica, so nothing can be written' : 'Primary server (writable)', signals.is_replica],
+        ];
+        const filled = plan.tables.filter(t => !t.is_empty).sort((a, b) => b.total_bytes - a.total_bytes);
+        if (filled.length) items.push([`${filled.length} table${filled.length === 1 ? ' already has' : 's already have'} data, e.g. ${filled.slice(0, 3).map(t => `${t.name} (${bytes(t.total_bytes)})`).join(', ')}`, true]);
+        list.replaceChildren(...items.map(([text, warn]) => el('li', warn ? 'is-warning' : '', text)));
+    }
+
+    // -----------------------------------------------------------------
+    // Running a job
+    // -----------------------------------------------------------------
+    const overlay = document.getElementById('progress');
+    let jobId = null, pollTimer = null;
+
+    function duration(seconds) {
+        if (seconds === null || seconds === undefined) return '—';
+        seconds = Math.round(seconds);
+        if (seconds < 60) return seconds + 's';
+        const minutes = Math.floor(seconds / 60);
+        return minutes < 60 ? `${minutes}m ${seconds % 60}s` : `${Math.floor(minutes / 60)}h ${minutes % 60}m`;
+    }
+
+    function renderJob(job) {
+        const steps = document.getElementById('progress-steps');
+        steps.replaceChildren(...job.tables.map((t, i) => {
+            const step = el('div', 'loading-step');
+            const state = {done: 'done', loading: 'running', failed: 'failed', skipped: 'failed', cancelled: 'failed'}[t.status];
+            if (state) step.classList.add(state);
+            if (t.analyzing) { step.classList.remove('done'); step.classList.add('running'); }
+            step.append(el('span', 'step-icon', t.status === 'done' ? '✓' : ['failed', 'skipped', 'cancelled'].includes(t.status) ? '✕' : String(i + 1)),
+                        el('span', 'step-text', t.name));
+            const grown = Math.max(t.bytes - t.start_bytes, 0);
+            const detail = t.status === 'pending' ? 'waiting'
+                : t.error && t.status !== 'done' ? t.error.slice(0, 80)
+                : `${bytes(grown)} / ${bytes(t.target_bytes)} · ${count(t.rows)} rows` + (t.analyzing ? ' · analyzing' : '');
+            const detailNode = el('span', 'step-detail', detail);
+            if (t.error) detailNode.title = t.error;
+            step.appendChild(detailNode);
+            return step;
+        }));
+        const analyze = el('div', 'loading-step' + (job.phase === 'analyzing' ? ' running' : job.phase === 'done' ? ' done' : ''));
+        analyze.append(el('span', 'step-icon', job.phase === 'done' ? '✓' : String(job.tables.length + 1)),
+                       el('span', 'step-text', 'Update planner statistics (ANALYZE)'));
+        steps.appendChild(analyze);
+
+        document.getElementById('progress-bar').style.width = job.progress + '%';
+        document.getElementById('progress-meta').textContent =
+            `${bytes(job.done_bytes)} of ${bytes(job.target_bytes)} · ${job.progress}% · ${bytes(job.rate_bytes)}/s · ` +
+            `${duration(job.elapsed)} elapsed` + (job.eta ? ` · about ${duration(job.eta)} left` : '');
+        const current = job.tables.find(t => t.status === 'loading');
+        document.getElementById('progress-subtitle').textContent =
+            job.status !== 'running' ? '' : job.phase === 'analyzing' ? 'Updating planner statistics…'
+            : current ? `Loading ${current.name}…` : 'Preparing…';
+
+        if (job.status !== 'running') {
+            clearInterval(pollTimer);
+            window.onbeforeunload = null;
+            document.getElementById('progress-spinner').hidden = true;
+            const failed = job.tables.filter(t => t.status === 'failed').length;
+            document.getElementById('progress-title').textContent =
+                job.status === 'done' ? (failed ? `Finished with ${failed} failed table${failed === 1 ? '' : 's'}` : 'Test data is ready')
+                : job.status === 'cancelled' ? 'Cancelled. The rows loaded so far are kept.'
+                : 'Data generation failed';
+            document.getElementById('progress-subtitle').textContent = job.error || `${bytes(job.done_bytes)} added in ${duration(job.elapsed)}.`;
+            document.getElementById('progress-running-actions').hidden = true;
+            document.getElementById('progress-done-actions').hidden = false;
+        }
+    }
+
+    async function poll() {
+        try {
+            const response = await fetch(`{% url 'advisor:api_datagen_job' 'JOBID' %}`.replace('JOBID', jobId));
+            if (response.status === 404) {
+                // The job no longer exists: Tuning Buddy was restarted while it ran
+                clearInterval(pollTimer);
+                window.onbeforeunload = null;
+                document.getElementById('progress-spinner').hidden = true;
+                document.getElementById('progress-title').textContent = 'This job is no longer running';
+                document.getElementById('progress-subtitle').textContent =
+                    'Tuning Buddy was restarted while it ran. The rows loaded before that are kept; ' +
+                    'check the table sizes in Databases, and generate again if you need more.';
+                document.getElementById('progress-running-actions').hidden = true;
+                document.getElementById('progress-done-actions').hidden = false;
+                return;
+            }
+            const job = await response.json();
+            if (job.success === false) throw new Error(job.error);
+            renderJob(job);
+        } catch (e) {
+            document.getElementById('progress-subtitle').textContent = 'Waiting for Tuning Buddy… ' + e.message;
+        }
+    }
+
+    generateButton.addEventListener('click', async () => {
+        const targets = {};
+        rows.forEach(row => { const t = targetBytes(row); if (t) targets[row.info.name] = t; });
+        generateButton.disabled = true;
+        const errorBox = document.getElementById('start-error');
+        errorBox.hidden = true;
+        const result = await post("{% url 'advisor:api_datagen_start' %}", {
+            targets, confirm_database: confirmName.value.trim(),
+            confirm_not_production: remote ? confirmProduction.checked : false,
+        }).catch(e => ({success: false, error: e.message}));
+        if (!result.success) {
+            errorBox.textContent = result.error || 'Could not start.';
+            errorBox.hidden = false;
+            update();
+            return;
+        }
+        jobId = result.job_id;
+        overlay.style.display = 'flex';
+        window.onbeforeunload = event => { event.preventDefault(); event.returnValue = ''; };
+        poll();
+        pollTimer = setInterval(poll, 1000);
+    });
+
+    document.getElementById('cancel').addEventListener('click', async () => {
+        const button = document.getElementById('cancel');
+        button.disabled = true;
+        button.textContent = 'Cancelling after this batch…';
+        await fetch(`{% url 'advisor:api_datagen_cancel' 'JOBID' %}`.replace('JOBID', jobId),
+                    {method: 'POST', headers: {'X-CSRFToken': csrfToken}});
+    });
+
+    document.getElementById('close-progress').addEventListener('click', () => {
+        overlay.style.display = 'none';
+        location.reload();  // show the new sizes
+    });
+
+    // -----------------------------------------------------------------
+    // Start: read the plan
+    // -----------------------------------------------------------------
+    post("{% url 'advisor:api_datagen_plan' %}", {}).then(result => {
+        if (!result.success && result.success !== undefined) throw new Error(result.error);
+        plan = result;
+        if (!plan.tables.length) {
+            planBody.replaceChildren(el('div', 'empty-state', `No tables in ${SCHEMA}.`));
+            return;
+        }
+        renderPlan();
+        renderSafety();
+        update();
+    }).catch(e => {
+        planBody.replaceChildren(el('div', 'message message-error', 'Could not read the tables: ' + e.message));
+    });
+})();
+</script>
+{% endif %}
+{% endblock %}

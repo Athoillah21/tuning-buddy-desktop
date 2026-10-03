@@ -1,0 +1,45 @@
+{% load explorer %}<div class="table-scroll">
+    <table class="data-table sortable-table">
+        <thead>
+            <tr>
+                <th class="sortable" data-type="text">Table</th>
+                <th class="sortable" data-type="text">Kind</th>
+                <th class="sortable num" data-type="num">Rows ≈</th>
+                <th class="sortable num" data-type="num">Data</th>
+                <th class="sortable num" data-type="num">Indexes</th>
+                <th class="sortable num sorted-desc" data-type="num">Total</th>
+                <th class="sortable num" data-type="num">Seq scans</th>
+                <th class="sortable num" data-type="num">Index scans</th>
+                <th class="sortable" data-type="text">Last analyzed</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% with largest=tables.0.total_bytes %}
+            {% for table in tables %}
+            <tr>
+                <td data-value="{{ table.schema }}.{{ table.name }}">
+                    <a data-nav data-reveal href="{% explorer_href c=connection.pk db=database schema=table.schema kind='table' name=table.name %}">
+                        {% if show_schema and table.schema != 'public' %}<span class="card-description">{{ table.schema }}.</span>{% endif %}<strong>{{ table.name }}</strong>
+                    </a>
+                    {% if table.table_bytes == 0 and table.relkind != 'p' %}<span class="tag">empty</span>{% endif %}
+                </td>
+                <td data-value="{{ table.kind }}">
+                    {% if table.relkind == 'p' %}<span class="tag tag-accent">partitioned · {{ table.partition_count }}</span>
+                    {% else %}<span class="tag">{{ table.kind }}</span>{% endif %}
+                </td>
+                <td class="num" data-value="{{ table.row_estimate }}">{{ table.row_estimate|approx_rows }}</td>
+                <td class="num" data-value="{{ table.table_bytes }}">{{ table.table_bytes|filesizeformat }}</td>
+                <td class="num" data-value="{{ table.index_bytes }}">{{ table.index_bytes|filesizeformat }} <span class="card-description">({{ table.index_count }})</span></td>
+                <td class="num" data-value="{{ table.total_bytes }}">{{ table.total_bytes|filesizeformat }}
+                    <div class="size-bar"><span style="width: {{ table.total_bytes|share_of:largest }}%"></span></div></td>
+                <td class="num" data-value="{{ table.seq_scans|default:0 }}">{{ table.seq_scans|number }}</td>
+                <td class="num" data-value="{{ table.index_scans|default:0 }}">{{ table.index_scans|number }}</td>
+                <td data-value="{{ table.last_analyze|default:'' }}">{{ table.last_analyze|iso_datetime }}</td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="9" class="card-description">No tables.</td></tr>
+            {% endfor %}
+            {% endwith %}
+        </tbody>
+    </table>
+</div>

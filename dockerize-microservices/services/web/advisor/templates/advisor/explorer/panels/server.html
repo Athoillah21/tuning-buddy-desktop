@@ -1,0 +1,125 @@
+{% load explorer %}{% include 'advisor/explorer/panels/_crumbs.html' %}
+<div class="panel-header">
+    <div>
+        <h2 class="panel-title">{{ connection.name }}
+            {% if connection.pk == demo_connection_id %}<span class="tag tag-accent">bundled demo</span>{% endif %}</h2>
+        <p class="card-description">
+            {% if server %}PostgreSQL {{ server.version }} · {% endif %}{{ host }}:{{ connection.port }} · default database {{ connection.database }}
+        </p>
+    </div>
+    <div class="panel-actions">
+        <a class="btn btn-primary" href="{% url 'advisor:analyze_query' connection.pk %}">Analyze</a>
+        <a class="btn btn-secondary" data-nav href="{% explorer_href c=connection.pk db=connection.database kind='query' %}">Query tool</a>
+        <a class="btn btn-secondary" href="{% url 'advisor:test_cases' %}?connection={{ connection.pk }}">Test cases</a>
+    </div>
+</div>
+
+<div class="card connection-card">
+    <div class="connection-facts">
+        <div><span class="stat-label">Host</span><span class="mono">{{ host }}:{{ connection.port }}</span></div>
+        <div><span class="stat-label">Database</span><span>{{ connection.database }}</span></div>
+        <div><span class="stat-label">User</span><span>{{ username }}</span></div>
+        <div><span class="stat-label">SSL mode</span><span>{{ connection.ssl_mode }}{% if connection.may_be_unencrypted %}
+            <span class="tag tag-warning" title="This server is on another computer, and this SSL mode can fall back to plain text. Edit the connection and choose Require or Verify Full.">may be unencrypted</span>{% endif %}</span></div>
+        <div><span class="stat-label">Password</span>
+            <span>{% if connection.pk == demo_connection_id %}kept by Tuning Buddy, never expires<details class="reveal-password"><summary>Show, for other tools</summary><code class="mono">{{ demo_password }}</code></details>{% elif password_expired %}<span class="tag tag-warning">expired</span>{% else %}saved, encrypted{% endif %}</span></div>
+    </div>
+    <div class="connection-actions-bar">
+        <span class="connection-test-result" data-test-result></span>
+        <button class="btn btn-sm btn-ghost" data-test-url="{% url 'advisor:connection_test' connection.pk %}">
+            <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+            Test
+        </button>
+        <a class="btn btn-sm btn-ghost" data-nav href="{% explorer_href c=connection.pk kind='connection_edit' %}">
+            <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+            Edit
+        </a>
+        <button class="btn btn-sm btn-danger-ghost" data-delete-url="{% url 'advisor:connection_delete' connection.pk %}"
+                data-delete-name="{{ connection.name }}">
+            <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>
+            Delete
+        </button>
+    </div>
+</div>
+
+{% if server_error %}
+<div class="message message-error">
+    {{ server_error }}
+    {% if password_expired %}<a data-nav href="{% explorer_href c=connection.pk kind='connection_edit' %}">Enter the password</a>{% endif %}
+</div>
+{% else %}
+<div class="stat-grid">
+    <div class="stat-tile"><span class="stat-label">Version</span><span class="stat-value">{{ server.version }}</span></div>
+    <div class="stat-tile"><span class="stat-label">Up for</span><span class="stat-value">{{ server.uptime|default:"—" }}</span></div>
+    <div class="stat-tile"><span class="stat-label">Sessions</span><span class="stat-value">{{ server.sessions }} <span class="stat-muted">/ {{ server.max_connections }}</span></span></div>
+    <div class="stat-tile"><span class="stat-label">Role</span><span class="stat-value">{{ server.user }}{% if server.is_superuser %} <span class="tag tag-warning">superuser</span>{% endif %}</span></div>
+    <div class="stat-tile"><span class="stat-label">Mode</span><span class="stat-value">{% if server.is_replica %}read-only replica{% else %}primary{% endif %}</span></div>
+</div>
+
+<nav class="tabs">
+    {% for key, label in tabs %}
+    <a class="tab {% if tab == key %}active{% endif %}" data-nav href="{% explorer_href c=connection.pk kind='server' tab=key %}">{{ label }}
+        {% if key == 'databases' %}<span class="tab-count">{{ server.databases|length }}</span>{% endif %}</a>
+    {% endfor %}
+</nav>
+
+<div class="card">
+    <div class="table-scroll">
+    {% if tab == 'properties' %}
+        <table class="data-table">
+            <tbody>
+                <tr><td>Server</td><td class="mono">{{ server.version_full }}</td></tr>
+                <tr><td>Address</td><td class="mono">{{ server.address|default:"local socket" }}{% if server.port %}:{{ server.port }}{% endif %}</td></tr>
+                <tr><td>Started</td><td>{{ server.started_at|iso_datetime }}</td></tr>
+                <tr><td>Connected as</td><td>{{ server.user }}</td></tr>
+            </tbody>
+        </table>
+    {% elif tab == 'databases' %}
+        <table class="data-table sortable-table">
+            <thead><tr><th class="sortable" data-type="text">Database</th><th class="sortable" data-type="text">Owner</th>
+                <th>Encoding</th><th>Collation</th><th class="sortable num sorted-desc" data-type="num">Size</th></tr></thead>
+            <tbody>
+                {% for db in server.databases %}
+                <tr>
+                    <td data-value="{{ db.name }}">{% if db.can_connect %}<a data-nav data-reveal href="{% explorer_href c=connection.pk db=db.name kind='database' %}"><strong>{{ db.name }}</strong></a>{% else %}{{ db.name }} <span class="tag">no access</span>{% endif %}</td>
+                    <td data-value="{{ db.owner }}">{{ db.owner }}</td>
+                    <td>{{ db.encoding }}</td>
+                    <td>{{ db.collation }}</td>
+                    <td class="num" data-value="{{ db.total_bytes|default:0 }}">{% if db.total_bytes is not None %}{{ db.total_bytes|filesizeformat }}{% else %}—{% endif %}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    {% elif tab == 'settings' %}
+        <table class="data-table">
+            <thead><tr><th>Setting</th><th>Value</th><th>What it does</th></tr></thead>
+            <tbody>
+                {% for setting in server.settings %}
+                <tr><td class="mono"><strong>{{ setting.name }}</strong></td><td class="mono">{{ setting.value }}</td>
+                    <td class="card-description">{{ setting.description }}</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    {% elif tab == 'activity' %}
+        <div class="card-content">
+            {% for row in server.activity_summary %}<span class="tag">{{ row.state }}: {{ row.sessions }}</span> {% endfor %}
+        </div>
+        <table class="data-table">
+            <thead><tr><th>PID</th><th>Database</th><th>User</th><th>State</th><th>Waiting on</th><th class="num">Running for</th><th>Query</th></tr></thead>
+            <tbody>
+                {% for q in server.active_queries %}
+                <tr>
+                    <td class="num">{{ q.pid }}</td><td>{{ q.database|default:"" }}</td><td>{{ q.user|default:"" }}</td>
+                    <td>{{ q.state }}</td><td>{% if q.wait_event %}{{ q.wait_event_type }}: {{ q.wait_event }}{% endif %}</td>
+                    <td class="num">{{ q.seconds|duration }}</td>
+                    <td><code>{{ q.query|default:"(no permission to see other users' queries)" }}</code></td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="7" class="card-description">No other statements are running right now.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    {% endif %}
+    </div>
+</div>
+{% endif %}

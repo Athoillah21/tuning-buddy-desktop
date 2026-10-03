@@ -1,0 +1,154 @@
+{% load explorer %}{% include 'advisor/explorer/panels/_crumbs.html' with crumb_group='tables' crumb_group_label='Tables' crumb_last=name %}
+<div class="panel-header">
+    <div>
+        <h2 class="panel-title">{{ name }}</h2>
+        <p class="card-description">{{ detail.kind }} in {{ schema }}
+            {% if detail.is_partitioned %} · <code>PARTITION BY {{ detail.partition_key }}</code>{% endif %}
+            {% if detail.parent %} · partition of
+                <a data-nav data-reveal href="{% explorer_href c=connection.pk db=database schema=detail.parent.schema kind='table' name=detail.parent.name %}">{{ detail.parent.name }}</a>{% endif %}
+        </p>
+    </div>
+    <div class="panel-actions">
+        <a class="btn btn-secondary" data-nav href="{% explorer_href c=connection.pk db=database kind='query' sql=select_sql %}">Query</a>
+        <a class="btn btn-primary" href="{% url 'advisor:datagen' %}?c={{ connection.pk }}&db={{ database|urlencode }}&schema={{ schema|urlencode }}&tables={{ name|urlencode }}">Generate data</a>
+    </div>
+</div>
+
+<div class="stat-grid">
+    <div class="stat-tile"><span class="stat-label">Total size</span><span class="stat-value">{{ detail.total_bytes|filesizeformat }}</span></div>
+    <div class="stat-tile"><span class="stat-label">Data</span><span class="stat-value">{{ detail.table_bytes|filesizeformat }}</span></div>
+    <div class="stat-tile"><span class="stat-label">Indexes</span><span class="stat-value">{{ detail.index_bytes|filesizeformat }}</span></div>
+    <div class="stat-tile"><span class="stat-label">TOAST</span><span class="stat-value">{{ detail.toast_bytes|filesizeformat }}</span></div>
+    <div class="stat-tile"><span class="stat-label">Rows (estimate)</span><span class="stat-value">{{ detail.row_estimate|approx_rows }}</span>
+        {% if not detail.analyzed %}<span class="tag tag-warning" title="The planner has no statistics for this table">never analyzed</span>{% endif %}</div>
+</div>
+
+<nav class="tabs">
+    {% for key, label in tabs %}
+    <a class="tab {% if tab == key %}active{% endif %}" data-nav href="{% explorer_href c=connection.pk db=database schema=schema kind='table' name=name tab=key %}">
+        {{ label }}
+        {% if key == 'columns' %}<span class="tab-count">{{ detail.columns|length }}</span>
+        {% elif key == 'indexes' %}<span class="tab-count">{{ detail.indexes|length }}</span>
+        {% elif key == 'partitions' %}<span class="tab-count">{{ detail.partitions|length }}</span>
+        {% elif key == 'constraints' %}<span class="tab-count">{{ detail.constraints|length }}</span>{% endif %}
+    </a>
+    {% endfor %}
+</nav>
+
+<div class="card">
+    <div class="table-scroll">
+    {% if tab == 'columns' %}
+        <table class="data-table">
+            <thead><tr><th>#</th><th>Column</th><th>Type</th><th>Nullable</th><th>Default</th></tr></thead>
+            <tbody>
+                {% for column in detail.columns %}
+                <tr>
+                    <td class="num">{{ forloop.counter }}</td>
+                    <td><strong>{{ column.name }}</strong></td>
+                    <td class="mono">{{ column.type }}</td>
+                    <td>{% if column.nullable %}yes{% else %}<span class="tag">NOT NULL</span>{% endif %}</td>
+                    <td class="mono">{{ column.default|default:'' }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+
+    {% elif tab == 'indexes' %}
+        <table class="data-table">
+            <thead><tr><th>Index</th><th>Method</th><th>Key columns</th><th class="num">Size</th><th class="num">Scans</th><th></th><th>Definition</th></tr></thead>
+            <tbody>
+                {% for index in detail.indexes %}
+                <tr>
+                    <td><strong>{{ index.name }}</strong></td>
+                    <td>{{ index.method }}</td>
+                    <td class="mono">{{ index.columns|join:", " }}{% if index.predicate %}<div class="card-description">WHERE {{ index.predicate }}</div>{% endif %}</td>
+                    <td class="num">{{ index.bytes|filesizeformat }}</td>
+                    <td class="num">{{ index.scans|number }}</td>
+                    <td>
+                        {% if index.is_primary %}<span class="tag tag-accent">primary key</span>
+                        {% elif index.is_unique %}<span class="tag tag-accent">unique</span>{% endif %}
+                        {% if not index.is_valid %}<span class="tag tag-danger">invalid</span>{% endif %}
+                        {% if index.unused %}<span class="tag tag-warning" title="Never used since statistics were last reset">unused</span>{% endif %}
+                    </td>
+                    <td><code>{{ index.definition }}</code></td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="7" class="card-description">No indexes. Every lookup on {{ name }} reads the whole table.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+
+    {% elif tab == 'partitions' %}
+        <table class="data-table">
+            <thead><tr><th>Partition</th><th>Bounds</th><th class="num">Rows ≈</th><th class="num">Size</th></tr></thead>
+            <tbody>
+                {% with largest=detail.total_bytes %}
+                {% for part in detail.partitions %}
+                <tr>
+                    <td><a data-nav href="{% explorer_href c=connection.pk db=database schema=part.schema kind='table' name=part.name %}"><strong>{{ part.name }}</strong></a>
+                        {% if part.relkind == 'p' %}<span class="tag tag-accent">sub-partitioned</span>{% endif %}</td>
+                    <td class="mono">{{ part.bounds }}</td>
+                    <td class="num">{{ part.row_estimate|approx_rows }}</td>
+                    <td class="num">{{ part.total_bytes|filesizeformat }}
+                        <div class="size-bar"><span style="width: {{ part.total_bytes|share_of:largest }}%"></span></div></td>
+                </tr>
+                {% endfor %}
+                {% endwith %}
+            </tbody>
+        </table>
+
+    {% elif tab == 'constraints' %}
+        <table class="data-table">
+            <thead><tr><th>Constraint</th><th>Type</th><th>Definition</th></tr></thead>
+            <tbody>
+                {% for constraint in detail.constraints %}
+                <tr><td><strong>{{ constraint.name }}</strong></td><td>{{ constraint.type }}</td><td><code>{{ constraint.definition }}</code></td></tr>
+                {% empty %}
+                <tr><td colspan="3" class="card-description">No constraints.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+
+    {% elif tab == 'activity' %}
+        <table class="data-table">
+            <tbody>
+                <tr><td>Sequential scans</td><td class="num">{{ detail.seq_scans|number }}</td></tr>
+                <tr><td>Index scans</td><td class="num">{{ detail.index_scans|number }}</td></tr>
+                <tr><td>Rows inserted</td><td class="num">{{ detail.rows_inserted|number }}</td></tr>
+                <tr><td>Rows updated</td><td class="num">{{ detail.rows_updated|number }}</td></tr>
+                <tr><td>Rows deleted</td><td class="num">{{ detail.rows_deleted|number }}</td></tr>
+                <tr><td>Live rows</td><td class="num">{{ detail.live_rows|number }}</td></tr>
+                <tr><td>Dead rows</td><td class="num">{{ detail.dead_rows|number }}</td></tr>
+                <tr><td>Last vacuum</td><td class="num">{{ detail.last_vacuum|iso_datetime }}</td></tr>
+                <tr><td>Last analyze</td><td class="num">{{ detail.last_analyze|iso_datetime }}</td></tr>
+            </tbody>
+        </table>
+        <div class="card-content card-description">Counters are cumulative since PostgreSQL's statistics were last reset{% if detail.is_partitioned %}, summed over every partition{% endif %}.</div>
+
+    {% elif tab == 'ddl' %}
+        <div class="ddl-toolbar">
+            <span class="card-description">Built from the catalog: columns, constraints, partitions, indexes, owner and comments.</span>
+            <button class="btn btn-sm btn-secondary" data-copy="#ddl-text">Copy</button>
+        </div>
+        <pre class="ddl-output" id="ddl-text">{{ ddl }}</pre>
+
+    {% elif tab == 'data' %}
+        {% if preview_error %}
+        <div class="card-content"><div class="message message-error">{{ preview_error }}</div></div>
+        {% else %}
+        <table class="data-table data-grid">
+            <thead><tr>{% for column in preview.columns %}<th title="{{ column.type }}">{{ column.name }}</th>{% endfor %}</tr></thead>
+            <tbody>
+                {% for row in preview.rows %}
+                <tr>{% for cell in row %}<td {% if cell is None %}class="cell-null"{% endif %} title="{{ cell|default_if_none:'' }}">{% if cell is None %}NULL{% else %}{{ cell }}{% endif %}</td>{% endfor %}</tr>
+                {% empty %}
+                <tr><td colspan="{{ preview.columns|length }}" class="card-description">The table is empty.
+                    <a href="{% url 'advisor:datagen' %}?c={{ connection.pk }}&db={{ database|urlencode }}&schema={{ schema|urlencode }}&tables={{ name|urlencode }}">Generate test data</a></td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        <div class="card-content card-description">First {{ preview.rows|length }} rows, in storage order. Long values are cut at 500 characters; spatial columns are shown as EWKT.</div>
+        {% endif %}
+    {% endif %}
+    </div>
+</div>

@@ -1,0 +1,9 @@
+# Tuning Buddy web service (Django UI)
+Django>=4.2,<5.0
+psycopg2-binary>=2.9
+cryptography>=41.0
+python-dotenv>=1.0
+dj-database-url>=2.1
+whitenoise>=6.6
+requests>=2.31
+gunicorn>=22.0

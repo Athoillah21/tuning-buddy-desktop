@@ -1,0 +1,11 @@
+{% extends 'advisor/base.html' %}
+{# Only used without JavaScript; normally the form opens inside the Databases page. #}
+
+{% block title %}{{ title }}{% endblock %}
+{% block page_title %}Databases{% endblock %}
+
+{% block content %}
+<div class="form-container">
+    {% include 'advisor/explorer/panels/connection_form.html' %}
+</div>
+{% endblock %}

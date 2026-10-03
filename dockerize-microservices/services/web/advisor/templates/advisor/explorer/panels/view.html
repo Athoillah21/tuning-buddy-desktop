@@ -1,0 +1,55 @@
+{% load explorer %}{% if detail.relkind == 'm' %}{% include 'advisor/explorer/panels/_crumbs.html' with crumb_group='materialized_views' crumb_group_label='Materialized views' crumb_last=name %}{% else %}{% include 'advisor/explorer/panels/_crumbs.html' with crumb_group='views' crumb_group_label='Views' crumb_last=name %}{% endif %}
+<div class="panel-header">
+    <div>
+        <h2 class="panel-title">{{ name }}</h2>
+        <p class="card-description">{{ detail.kind }} in {{ schema }} · owner {{ detail.owner }}
+            {% if detail.relkind == 'm' %} · {{ detail.total_bytes|filesizeformat }}{% if not detail.is_populated %} · <span class="tag tag-warning">not populated</span>{% endif %}{% endif %}</p>
+        {% if detail.description %}<p class="card-description">{{ detail.description }}</p>{% endif %}
+    </div>
+    <div class="panel-actions">
+        <a class="btn btn-secondary" data-nav href="{% explorer_href c=connection.pk db=database kind='query' sql=select_sql %}">Query</a>
+    </div>
+</div>
+
+<nav class="tabs">
+    {% for key, label in tabs %}
+    <a class="tab {% if tab == key %}active{% endif %}" data-nav href="{% explorer_href c=connection.pk db=database schema=schema kind=kind name=name tab=key %}">{{ label }}
+        {% if key == 'columns' %}<span class="tab-count">{{ detail.columns|length }}</span>{% endif %}</a>
+    {% endfor %}
+</nav>
+
+<div class="card">
+    <div class="table-scroll">
+    {% if tab == 'definition' %}
+        <pre class="ddl-output">{{ detail.definition }}</pre>
+    {% elif tab == 'columns' %}
+        <table class="data-table">
+            <thead><tr><th>#</th><th>Column</th><th>Type</th></tr></thead>
+            <tbody>
+                {% for column in detail.columns %}
+                <tr><td class="num">{{ forloop.counter }}</td><td><strong>{{ column.name }}</strong></td><td class="mono">{{ column.type }}</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    {% elif tab == 'ddl' %}
+        <div class="ddl-toolbar"><span></span><button class="btn btn-sm btn-secondary" data-copy="#ddl-text">Copy</button></div>
+        <pre class="ddl-output" id="ddl-text">{{ detail.ddl }}</pre>
+    {% elif tab == 'data' %}
+        {% if preview_error %}
+        <div class="card-content"><div class="message message-error">{{ preview_error }}</div></div>
+        {% else %}
+        <table class="data-table data-grid">
+            <thead><tr>{% for column in preview.columns %}<th title="{{ column.type }}">{{ column.name }}</th>{% endfor %}</tr></thead>
+            <tbody>
+                {% for row in preview.rows %}
+                <tr>{% for cell in row %}<td {% if cell is None %}class="cell-null"{% endif %} title="{{ cell|default_if_none:'' }}">{% if cell is None %}NULL{% else %}{{ cell }}{% endif %}</td>{% endfor %}</tr>
+                {% empty %}
+                <tr><td colspan="{{ preview.columns|length }}" class="card-description">No rows.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        <div class="card-content card-description">First {{ preview.rows|length }} rows. The view runs its query to show them, with a 15-second limit.</div>
+        {% endif %}
+    {% endif %}
+    </div>
+</div>

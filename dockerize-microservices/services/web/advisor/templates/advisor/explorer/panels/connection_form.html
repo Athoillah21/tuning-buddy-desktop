@@ -1,0 +1,88 @@
+{% load explorer %}{% if connection %}{% include 'advisor/explorer/panels/_crumbs.html' with database='' schema='' crumb_last='Edit' %}{% endif %}
+<div class="panel-header">
+    <div>
+        <h2 class="panel-title">{{ title }}</h2>
+        <p class="card-description">{% if connection %}Change how Tuning Buddy reaches "{{ connection.name }}". Enter the password again: it is stored encrypted and never shown.{% else %}A PostgreSQL server Tuning Buddy can analyze and browse. Every database on that server shows up in the tree.{% endif %}</p>
+    </div>
+</div>
+
+<div class="card connection-form-card">
+    <div class="card-content">
+        <form method="post" class="form" data-panel-form
+              action="{% if connection %}{% url 'advisor:connection_edit' connection.pk %}{% else %}{% url 'advisor:connection_add' %}{% endif %}">
+            {% csrf_token %}
+            {% if form.non_field_errors %}<div class="message message-error">{{ form.non_field_errors.0 }}</div>{% endif %}
+
+            <div class="form-group">
+                <label for="id_name" class="form-label">Connection name</label>
+                {{ form.name }}
+                {% if form.name.errors %}<span class="form-error">{{ form.name.errors.0 }}</span>{% endif %}
+                <span class="form-hint">A friendly name to identify this connection</span>
+            </div>
+
+            <div class="form-row">
+                <div class="form-group flex-grow">
+                    <label for="id_host" class="form-label">Host</label>
+                    {{ form.host }}
+                    {% if form.host.errors %}<span class="form-error">{{ form.host.errors.0 }}</span>{% endif %}
+                    {% if desktop_mode %}
+                    <span class="form-hint">Use <code>localhost</code> for a database on this computer.</span>
+                    {% else %}
+                    <span class="form-hint">The analyzer runs in Docker: use <code>host.docker.internal</code> for a database on this computer, or <code>sampledb</code> (port 5432) for the demo database.</span>
+                    {% endif %}
+                </div>
+                <div class="form-group" style="width: 120px;">
+                    <label for="id_port" class="form-label">Port</label>
+                    {{ form.port }}
+                    {% if form.port.errors %}<span class="form-error">{{ form.port.errors.0 }}</span>{% endif %}
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label for="id_database" class="form-label">Database name</label>
+                {{ form.database }}
+                {% if form.database.errors %}<span class="form-error">{{ form.database.errors.0 }}</span>{% endif %}
+                <span class="form-hint">The default database. Other databases on the same server open with the same login.</span>
+            </div>
+
+            <div class="form-row">
+                <div class="form-group flex-grow">
+                    <label for="id_username" class="form-label">Username</label>
+                    {{ form.username }}
+                    {% if form.username.errors %}<span class="form-error">{{ form.username.errors.0 }}</span>{% endif %}
+                </div>
+                <div class="form-group flex-grow">
+                    <label for="id_password" class="form-label">Password</label>
+                    {{ form.password }}
+                    {% if form.password.errors %}<span class="form-error">{{ form.password.errors.0 }}</span>{% endif %}
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label for="id_ssl_mode" class="form-label">SSL mode</label>
+                {{ form.ssl_mode }}
+                {% if form.ssl_mode.errors %}<span class="form-error">{{ form.ssl_mode.errors.0 }}</span>{% endif %}
+                <span class="form-hint">For a server on another computer use <strong>Require</strong>, or
+                    <strong>Verify Full</strong> to also check its certificate. Disable, Allow and Prefer can
+                    send everything unencrypted.</span>
+                <label class="checkbox-label">{{ form.allow_unencrypted }} {{ form.allow_unencrypted.label }}</label>
+            </div>
+
+            <div class="form-actions">
+                {% if connection %}
+                <a data-nav href="{% explorer_href c=connection.pk kind='server' %}" class="btn btn-ghost">Cancel</a>
+                {% else %}
+                <a data-nav href="{% explorer_href %}" class="btn btn-ghost">Cancel</a>
+                {% endif %}
+                <button type="submit" class="btn btn-primary">
+                    <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
+                        <polyline points="17 21 17 13 7 13 7 21" />
+                        <polyline points="7 3 7 8 15 8" />
+                    </svg>
+                    Save connection
+                </button>
+            </div>
+        </form>
+    </div>
+</div>

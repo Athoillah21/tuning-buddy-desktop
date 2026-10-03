@@ -1,0 +1,32 @@
+# Tuning Buddy desktop build: the four services' dependencies in one environment.
+# Keep in sync with dockerize-microservices/services/*/requirements.txt (minus gunicorn and pytest).
+
+# web (Django UI)
+Django>=4.2,<5.0
+python-dotenv>=1.0
+dj-database-url>=2.1
+whitenoise>=6.6
+requests>=2.31
+
+# ai / analyzer / report (FastAPI). Plain uvicorn: the [standard] extras are loaded dynamically
+fastapi>=0.110
+uvicorn>=0.29
+pydantic>=2.6
+sqlalchemy>=2.0
+psycopg2-binary>=2.9
+cryptography>=41.0
+httpx>=0.27
+reportlab>=4.0
+anthropic>=1.5,<2
+openai>=1.40,<4
+google-genai>=1.0,<3
+
+# Desktop runtime: waitress replaces gunicorn (POSIX-only), pywebview is the WebView2 window
+waitress>=3.0
+pywebview>=5.0
+tzlocal>=5.0  # the computer's time zone for dates in the UI
+
+# Build tools
+pyinstaller>=6.6
+pillow>=10.0
+pefile>=2023.2

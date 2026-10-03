@@ -1,0 +1,209 @@
+{% extends 'advisor/base.html' %}
+
+{% block title %}AI Settings{% endblock %}
+{% block page_title %}AI Settings{% endblock %}
+
+{% block header_actions %}
+<div class="header-actions-group">
+    {% if providers %}
+    <button type="button" class="btn btn-secondary" id="checkAllBtn">
+        <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+            <polyline points="22 4 12 14.01 9 11.01" />
+        </svg>
+        Check all
+    </button>
+    {% endif %}
+    <a href="{% url 'advisor:ai_provider_add' %}" class="btn btn-primary">
+        <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="12" y1="5" x2="12" y2="19" />
+            <line x1="5" y1="12" x2="19" y2="12" />
+        </svg>
+        Add Provider
+    </a>
+</div>
+{% endblock %}
+
+{% block content %}
+{% csrf_token %}
+
+<p class="form-hint privacy-note">What an analysis sends to the provider: the query, its execution plan, and the
+    names, columns, indexes and row counts of the tables it reads. Never the rows themselves. API keys are stored
+    encrypted and are only ever sent to the address they were saved for.</p>
+
+<div class="ai-readiness {% if status.ready %}ai-readiness-ready{% else %}ai-readiness-locked{% endif %}">
+    <span class="ai-status-dot {% if status.ready %}ai-status-dot-ready{% else %}ai-status-dot-locked{% endif %}"></span>
+    <div>
+        {% if status.ready %}
+        <strong>Ready.</strong>
+        {{ status.healthy_count }} of {{ status.enabled_count }} enabled provider{{ status.enabled_count|pluralize }} passed the health check.
+        <a href="{% url 'advisor:home' %}">Go to dashboard &rarr;</a>
+        {% else %}
+        <strong>Locked.</strong>
+        Tuning Buddy can be used once at least one enabled provider passes the health check.
+        Providers are tried in priority order and fall back to the next one if a call fails.
+        {% endif %}
+    </div>
+</div>
+
+{% if providers %}
+<div class="connections-grid">
+    {% for p in providers %}
+    <div class="card connection-card ai-provider-card" data-id="{{ p.id }}">
+        <div class="card-content">
+            <div class="connection-header">
+                <div class="connection-icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <rect x="4" y="4" width="16" height="16" rx="2" />
+                        <rect x="9" y="9" width="6" height="6" />
+                        <line x1="9" y1="1" x2="9" y2="4" />
+                        <line x1="15" y1="1" x2="15" y2="4" />
+                        <line x1="9" y1="20" x2="9" y2="23" />
+                        <line x1="15" y1="20" x2="15" y2="23" />
+                    </svg>
+                </div>
+                <div class="connection-title">
+                    <h3>{{ p.name }}</h3>
+                    <span class="connection-db">{{ p.provider_label }}</span>
+                </div>
+                <span class="status-badge ai-status-{{ p.last_check_status }}" data-role="status">{{ p.last_check_status }}</span>
+            </div>
+
+            <div class="connection-details">
+                <div class="detail-row">
+                    <span class="detail-label">Model</span>
+                    <span class="detail-value"><code>{{ p.model }}</code></span>
+                </div>
+                {% if p.base_url %}
+                <div class="detail-row">
+                    <span class="detail-label">Base URL</span>
+                    <span class="detail-value"><code>{{ p.base_url }}</code></span>
+                </div>
+                {% endif %}
+                <div class="detail-row">
+                    <span class="detail-label">API key</span>
+                    <span class="detail-value">{{ p.api_key_masked|default:"none" }}</span>
+                </div>
+                <div class="detail-row">
+                    <span class="detail-label">Priority</span>
+                    <span class="detail-value">{{ p.priority }}{% if not p.enabled %} &middot; disabled{% endif %}</span>
+                </div>
+                <div class="detail-row">
+                    <span class="detail-label">Last check</span>
+                    <span class="detail-value" data-role="checked-at">{{ p.last_checked_at|date:"Y-m-d H:i"|default:"never" }}</span>
+                </div>
+            </div>
+
+            <div class="connection-actions">
+                <button type="button" class="btn btn-sm btn-outline check-provider" data-id="{{ p.id }}">
+                    <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+                        <polyline points="22 4 12 14.01 9 11.01" />
+                    </svg>
+                    Check
+                </button>
+                <a href="{% url 'advisor:ai_provider_edit' p.id %}" class="btn btn-sm btn-ghost" title="Edit">
+                    <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+                    </svg>
+                </a>
+                <a href="{% url 'advisor:ai_provider_delete' p.id %}" class="btn btn-sm btn-ghost btn-danger" title="Delete">
+                    <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <polyline points="3 6 5 6 21 6" />
+                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                    </svg>
+                </a>
+            </div>
+        </div>
+        <div class="connection-test-result {% if p.last_check_status == 'healthy' %}success{% elif p.last_check_status == 'unhealthy' %}error{% endif %}"
+             data-role="message" {% if not p.last_check_message %}style="display: none;"{% endif %}>{{ p.last_check_message|default:"" }}</div>
+    </div>
+    {% endfor %}
+</div>
+{% else %}
+<div class="empty-state-large">
+    <div class="empty-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <rect x="4" y="4" width="16" height="16" rx="2" />
+            <rect x="9" y="9" width="6" height="6" />
+        </svg>
+    </div>
+    <h3>No AI Providers</h3>
+    <p>Add Google Gemini, Anthropic Claude, or any OpenAI-compatible API (including a local Ollama) to get started.</p>
+    <a href="{% url 'advisor:ai_provider_add' %}" class="btn btn-primary">Add Provider</a>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]').value;
+    const checkUrlTemplate = "{% url 'advisor:ai_provider_check' 0 %}";
+    const checkAllUrl = "{% url 'advisor:ai_check_all' %}";
+    const wasReady = {{ status.ready|yesno:"true,false" }};
+
+    async function postForJson(url) {
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: { 'X-CSRFToken': csrfToken, 'X-Requested-With': 'XMLHttpRequest' },
+        });
+        return response.json();
+    }
+
+    function renderResult(card, provider, result) {
+        const badge = card.querySelector('[data-role=status]');
+        badge.textContent = provider.last_check_status;
+        badge.className = 'status-badge ai-status-' + provider.last_check_status;
+
+        const message = card.querySelector('[data-role=message]');
+        message.style.display = 'block';
+        message.className = 'connection-test-result ' + (result.healthy ? 'success' : 'error');
+        message.textContent = result.message;
+
+        card.querySelector('[data-role=checked-at]').textContent = 'just now';
+    }
+
+    document.querySelectorAll('.check-provider').forEach(btn => {
+        btn.addEventListener('click', async function () {
+            const card = this.closest('.ai-provider-card');
+            const originalHtml = this.innerHTML;
+            this.disabled = true;
+            this.innerHTML = '<span class="spinner"></span> Checking...';
+
+            try {
+                const data = await postForJson(checkUrlTemplate.replace('/0/', `/${this.dataset.id}/`));
+                if (!data.success) {
+                    throw new Error(data.error || 'Check failed');
+                }
+                renderResult(card, data.provider, data.result);
+                if (data.ready !== wasReady) {
+                    window.location.reload();
+                    return;
+                }
+            } catch (error) {
+                const message = card.querySelector('[data-role=message]');
+                message.style.display = 'block';
+                message.className = 'connection-test-result error';
+                message.textContent = error.message;
+            }
+
+            this.disabled = false;
+            this.innerHTML = originalHtml;
+        });
+    });
+
+    const checkAllBtn = document.getElementById('checkAllBtn');
+    if (checkAllBtn) {
+        checkAllBtn.addEventListener('click', async function () {
+            this.disabled = true;
+            this.innerHTML = '<span class="spinner"></span> Checking all...';
+            try {
+                await postForJson(checkAllUrl);
+            } finally {
+                window.location.reload();
+            }
+        });
+    }
+</script>
+{% endblock %}

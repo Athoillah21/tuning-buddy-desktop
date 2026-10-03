@@ -1,0 +1,37 @@
+{% extends 'advisor/base.html' %}
+
+{% block title %}Delete History Record{% endblock %}
+{% block page_title %}Delete History Record{% endblock %}
+
+{% block content %}
+<div class="confirm-delete-container">
+    <div class="delete-warning">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="48" height="48">
+            <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+            <line x1="12" y1="9" x2="12" y2="13" />
+            <line x1="12" y1="17" x2="12.01" y2="17" />
+        </svg>
+        <h2>Are you sure?</h2>
+        <p>You are about to delete this history record:</p>
+        <div class="query-preview">
+            <code>{{ query.original_query|truncatechars:100 }}</code>
+        </div>
+        <p class="warning-text">This action cannot be undone. All recommendations for this query will also be deleted.
+        </p>
+    </div>
+
+    <div class="delete-actions">
+        <form method="post">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-danger">
+                <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="3 6 5 6 21 6" />
+                    <path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2" />
+                </svg>
+                Yes, Delete
+            </button>
+            <a href="{% url 'advisor:query_history' %}" class="btn btn-ghost">Cancel</a>
+        </form>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,7 @@
+{% load explorer %}<div class="breadcrumb panel-crumbs">
+    <a data-nav href="{% explorer_href c=connection.pk kind='server' %}">{{ connection.name }}</a>
+    {% if database %} › <a data-nav href="{% explorer_href c=connection.pk db=database kind='database' %}">{{ database }}</a>{% endif %}
+    {% if schema %} › <a data-nav href="{% explorer_href c=connection.pk db=database schema=schema kind='schema' %}">{{ schema }}</a>{% endif %}
+    {% if crumb_group %} › <a data-nav href="{% explorer_href c=connection.pk db=database schema=schema kind='group' group=crumb_group %}">{{ crumb_group_label }}</a>{% endif %}
+    {% if crumb_last %} › <span>{{ crumb_last }}</span>{% endif %}
+</div>

@@ -1,0 +1,27 @@
+# Build output: made by desktop-apps/build.ps1. The installers are published as GitHub Release
+# downloads, not committed.
+desktop-apps/build/
+desktop-apps/dist/
+*.exe
+
+# Secrets and local data
+.env
+!.env.example
+*.sqlite3
+*.db
+*.log
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+staticfiles/
+
+# Editors and OS
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+node_modules/

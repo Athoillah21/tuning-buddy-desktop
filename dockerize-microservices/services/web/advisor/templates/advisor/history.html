@@ -1,0 +1,76 @@
+{% extends 'advisor/base.html' %}
+
+{% block title %}Query History{% endblock %}
+{% block page_title %}Query History{% endblock %}
+
+{% block content %}
+{% if queries %}
+<div class="history-table-container">
+    <table class="history-table">
+        <thead>
+            <tr>
+                <th>Query</th>
+                <th>Connection</th>
+                <th>Execution Time</th>
+                <th>Status</th>
+                <th>Date</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for q in queries %}
+            <tr>
+                <td class="query-cell">
+                    <code>{{ q.original_query|truncatechars:80 }}</code>
+                </td>
+                <td>{{ q.connection.name }}</td>
+                <td>
+                    {% if q.original_execution_time %}
+                    {{ q.original_execution_time|floatformat:2 }} ms
+                    {% else %}
+                    -
+                    {% endif %}
+                </td>
+                <td>
+                    <span class="status-badge status-{{ q.analysis_status }}">
+                        {{ q.analysis_status }}
+                    </span>
+                </td>
+                <td>{{ q.created_at|date:"M d, Y H:i" }}</td>
+                <td class="action-cell">
+                    <a href="{% url 'advisor:view_results' q.id %}" class="btn btn-sm btn-ghost">
+                        <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                            <circle cx="12" cy="12" r="3" />
+                        </svg>
+                        View
+                    </a>
+                    <a href="{% url 'advisor:history_delete' q.id %}" class="btn btn-sm btn-danger-ghost">
+                        <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polyline points="3 6 5 6 21 6" />
+                            <path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2" />
+                        </svg>
+                        Delete
+                    </a>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% else %}
+<div class="empty-state-large">
+    <div class="empty-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <circle cx="12" cy="12" r="10" />
+            <polyline points="12 6 12 12 16 14" />
+        </svg>
+    </div>
+    <h3>No Query History</h3>
+    <p>Analyzed queries will appear here.</p>
+    <a href="{% url 'advisor:explorer' %}" class="btn btn-primary">
+        Analyze a Query
+    </a>
+</div>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>Tuning Buddy Setup</title>
+<link rel="stylesheet" href="app.css">
+</head>
+<body class="booting">
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <linearGradient id="g-tile" x1="0" y1="0" x2="1" y2="1"><stop offset="0"/><stop offset="1"/></linearGradient>
+    <symbol id="logo" viewBox="0 0 100 100">
+      <rect width="100" height="100" rx="23" fill="url(#g-tile)"/>
+      <path d="M24.02 71 A30 30 0 1 1 75.98 71" fill="none" stroke="#fff" stroke-width="7" stroke-linecap="round"/>
+      <g class="needle" transform="rotate(-35 50 56)"><line x1="50" y1="56" x2="73.4" y2="56" stroke="#fff" stroke-width="6.3" stroke-linecap="round"/></g>
+      <circle cx="50" cy="56" r="5.6" fill="#fff"/>
+    </symbol>
+    <symbol id="i-uac" viewBox="0 0 24 24"><path d="M12 2.8 4.6 5.7v5.6c0 4.6 3.1 8.6 7.4 10 4.3-1.4 7.4-5.4 7.4-10V5.7z" fill="#2f7cf6"/><path d="M12 2.8v18.5c4.3-1.4 7.4-5.4 7.4-10V12H12z" fill="#f6b500"/><path d="M12 2.8 4.6 5.7V12H12z" fill="#f6b500"/></symbol>
+  </defs>
+</svg>
+
+<div class="tint" aria-hidden="true"></div>
+
+<header class="titlebar pywebview-drag-region">
+  <div class="titlebar-name pywebview-drag-region">
+    <svg class="mini-logo"><use href="#logo"/></svg>
+    <span id="window-title">Tuning Buddy Setup</span>
+  </div>
+  <div class="window-buttons">
+    <button class="wbtn" id="btn-min" title="Minimise" aria-label="Minimise"><svg viewBox="0 0 12 12"><path d="M1.5 6h9"/></svg></button>
+    <button class="wbtn wbtn-close" id="btn-close" title="Close" aria-label="Close"><svg viewBox="0 0 12 12"><path d="M2 2l8 8M10 2l-8 8"/></svg></button>
+  </div>
+</header>
+
+<main class="stage">
+
+  <!-- Welcome (install) -->
+  <section class="screen" id="s-welcome">
+    <div class="column">
+      <svg class="logo animate-needle"><use href="#logo"/></svg>
+      <h1>Tuning Buddy</h1>
+      <p class="muted" id="version-line">Version <span id="ver"></span></p>
+
+      <div class="list">
+        <div class="item" id="row-demo">
+          <span class="label">Demo database <small>400 MB of sample tables</small></span>
+          <label class="toggle"><input type="checkbox" id="opt-demo" checked><span></span></label>
+        </div>
+        <div class="item">
+          <span class="label">Desktop shortcut</span>
+          <label class="toggle"><input type="checkbox" id="opt-shortcut"><span></span></label>
+        </div>
+        <div class="item" id="row-scope">
+          <span class="label">Install for <small id="scope-note"></small></span>
+          <div class="segmented" id="opt-scope" role="radiogroup">
+            <span class="seg-thumb"></span>
+            <button role="radio" data-value="all" aria-checked="true">Everyone</button>
+            <button role="radio" data-value="user" aria-checked="false">Just me</button>
+          </div>
+        </div>
+        <div class="item" id="row-folder">
+          <span class="label">Location</span>
+          <span class="path" id="folder" title=""></span>
+          <button class="link" id="btn-folder">Change</button>
+        </div>
+      </div>
+
+      <div class="alert" id="install-alert" hidden></div>
+      <button class="primary" id="btn-install">
+        <svg class="uac" id="uac"><use href="#i-uac"/></svg>
+        <span id="install-label">Install</span>
+      </button>
+    </div>
+  </section>
+
+  <!-- Confirm (uninstall) -->
+  <section class="screen" id="s-confirm">
+    <div class="column">
+      <svg class="logo muted-logo"><use href="#logo"/></svg>
+      <h1>Remove Tuning Buddy from this PC?</h1>
+      <p class="muted" id="confirm-sub"></p>
+      <p class="faint path-line" id="confirm-path"></p>
+
+      <div class="list">
+        <div class="item">
+          <span class="label">Also delete my data <small id="data-size"></small></span>
+          <label class="toggle toggle-danger"><input type="checkbox" id="opt-data"><span></span></label>
+        </div>
+      </div>
+      <p class="note" id="data-note">Your connections and history stay, so a reinstall picks up where you left off.</p>
+
+      <div class="alert" id="uninstall-alert" hidden></div>
+      <div class="buttons">
+        <button class="secondary" id="btn-keep">Keep it</button>
+        <button class="primary danger" id="btn-remove">Remove</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- Working: like the Analyze overlay -->
+  <section class="screen" id="s-progress">
+    <div class="column">
+      <div class="ring-wrap">
+        <svg class="ring" viewBox="0 0 120 120" id="ring">
+          <circle class="ring-track" cx="60" cy="60" r="54"/>
+          <circle class="ring-bar" cx="60" cy="60" r="54" id="ring-bar"/>
+        </svg>
+        <div class="ring-pct" id="ring-pct"><span id="pct">0</span></div>
+      </div>
+      <h2><span id="progress-title">Installing Tuning Buddy</span><span class="clock" id="elapsed">0:00</span></h2>
+      <div class="steps" id="steps"></div>
+      <div class="lyrics" id="lyrics"><div class="lyrics-track" id="lyrics-track"></div></div>
+      <div class="cancel-area" id="cancel-area">
+        <button class="text-button" id="btn-cancel">Cancel</button>
+        <div class="confirm" id="cancel-confirm" hidden>
+          <span id="cancel-question">Stop installing?</span>
+          <button class="text-button" id="btn-cancel-no">Keep going</button>
+          <button class="text-button strong" id="btn-cancel-yes">Stop</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Result: done, cancelled or error -->
+  <section class="screen" id="s-result">
+    <div class="column">
+      <div class="emblem" id="emblem">
+        <svg viewBox="0 0 24 24" class="emblem-check"><polyline points="5.5 12.5 10 17 18.5 8"/></svg>
+        <svg viewBox="0 0 24 24" class="emblem-mark"><path d="M12 7v6.5M12 16.8v.2"/></svg>
+        <svg viewBox="0 0 24 24" class="emblem-stop"><path d="M8.5 8.5l7 7M15.5 8.5l-7 7"/></svg>
+      </div>
+      <h1 id="result-title"></h1>
+      <p class="muted result-text" id="result-text"></p>
+      <button class="link" id="btn-details" hidden>Show details</button>
+      <pre class="details" id="details" hidden></pre>
+      <div class="buttons">
+        <button class="secondary" id="btn-result-secondary">Close</button>
+        <button class="primary" id="btn-result-primary"></button>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<script src="app.js"></script>
+</body>
+</html>

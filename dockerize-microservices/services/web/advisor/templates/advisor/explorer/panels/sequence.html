@@ -1,0 +1,20 @@
+{% load explorer %}{% include 'advisor/explorer/panels/_crumbs.html' with crumb_group='sequences' crumb_group_label='Sequences' crumb_last=name %}
+<div class="panel-header">
+    <div>
+        <h2 class="panel-title">{{ name }}</h2>
+        <p class="card-description">sequence in {{ schema }} · owner {{ detail.owner }}{% if detail.owned_by %} · used by <code>{{ detail.owned_by }}</code>{% endif %}</p>
+    </div>
+</div>
+
+<div class="stat-grid">
+    <div class="stat-tile"><span class="stat-label">Last value</span><span class="stat-value">{{ detail.last_value|number }}</span></div>
+    <div class="stat-tile"><span class="stat-label">Type</span><span class="stat-value">{{ detail.data_type }}</span></div>
+    <div class="stat-tile"><span class="stat-label">Increment</span><span class="stat-value">{{ detail.increment_by }}</span></div>
+    <div class="stat-tile"><span class="stat-label">Cache</span><span class="stat-value">{{ detail.cache_size }}</span></div>
+    <div class="stat-tile"><span class="stat-label">Range</span><span class="stat-value mono-value">{{ detail.min_value|number }} … {{ detail.max_value|number }}</span></div>
+</div>
+
+<div class="card">
+    <div class="ddl-toolbar"><span class="card-description">DDL</span><button class="btn btn-sm btn-secondary" data-copy="#ddl-text">Copy</button></div>
+    <pre class="ddl-output" id="ddl-text">{{ detail.ddl }}</pre>
+</div>

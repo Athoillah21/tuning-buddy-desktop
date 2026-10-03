@@ -1,0 +1,7 @@
+{% load explorer %}{% if connection %}{% include 'advisor/explorer/panels/_crumbs.html' %}{% endif %}
+<div class="message message-error">{{ error }}</div>
+{% if connection %}
+<p class="card-description" style="margin-top: 12px;">
+    <a data-nav href="{% explorer_href c=connection.pk kind='connection_edit' %}">Edit the connection</a> to fix it.
+</p>
+{% endif %}

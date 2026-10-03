@@ -1,0 +1,346 @@
+{% extends 'advisor/base.html' %}
+{% load static explorer %}
+
+{% block title %}Test Cases{% endblock %}
+{% block page_title %}Test Cases{% endblock %}
+
+{% block header_actions %}
+{% if selected %}
+<button id="run-all" class="btn btn-primary" {% if password_expired %}disabled{% endif %}>
+    <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <polygon points="5 3 19 12 5 21 5 3" />
+    </svg>
+    Run all {{ cases|length }} cases
+</button>
+{% endif %}
+{% endblock %}
+
+{% block content %}
+{% csrf_token %}
+{% if not selected %}
+<div class="empty-state">
+    <h3>No database to test against</h3>
+    <p>Add a connection first. The cases are written for the demo database's tables.</p>
+    <a href="{% url 'advisor:explorer' %}?kind=connection_add" class="btn btn-primary">Add Connection</a>
+</div>
+{% else %}
+
+<div class="card test-case-intro">
+    <div class="test-case-target">
+        <label for="connection" class="card-description">Run against</label>
+        <select id="connection" class="form-select">
+            {% for c in connections %}
+            <option value="{{ c.id }}" {% if c.id == selected.id %}selected{% endif %}>
+                {{ c.name }}{% if c.id == demo_connection_id %} (bundled){% endif %}
+            </option>
+            {% endfor %}
+        </select>
+    </div>
+    <p class="card-description">
+        Each case is a slow query written for the demo database's tables. Click a case to read its SQL and
+        what it tests. Running it goes through the same analysis as the Analyze page: the AI suggests fixes,
+        and each one is tested on a copy of the tables. Every case calls your AI provider and takes about
+        10 to 60 seconds, so a full run takes 15 to 30 minutes. Each finished case is saved to History.
+    </p>
+    {% if password_expired %}
+    <div class="message message-warning">
+        The saved password for "{{ selected.name }}" has expired.
+        <a href="{% url 'advisor:explorer' %}?c={{ selected.id }}&kind=connection_edit">Re-enter it</a> to run the cases.
+    </div>
+    {% endif %}
+    <p class="card-description" id="run-summary" {% if not saved_count %}hidden{% endif %}>{% if saved_count %}Last results: {{ saved_count }} of {{ cases|length }} cases, taken from History (the newest run of each).{% endif %}</p>
+</div>
+
+<div class="card">
+    <div class="table-scroll">
+        <table class="data-table test-case-table">
+            <thead>
+                <tr>
+                    <th>#</th>
+                    <th>Case</th>
+                    <th>Status</th>
+                    <th class="num">Original</th>
+                    <th class="num">Best</th>
+                    <th class="num">Gain</th>
+                    <th>Verdict</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for case in cases %}
+                <tr class="tc-row" data-case="{{ case.slug }}" data-title="{{ case.title }}" data-query="{{ case.query }}"
+                    tabindex="0" role="button" aria-expanded="false" aria-controls="detail-{{ case.slug }}">
+                    <td class="card-description">
+                        <svg class="tc-caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 6 15 12 9 18"/></svg>
+                        {{ forloop.counter }}
+                    </td>
+                    <td>
+                        <strong>{{ case.title }}</strong>
+                        {% if case.requires %}<span class="tag tag-accent">{{ case.requires }}</span>{% endif %}
+                        <div class="card-description">{{ case.expectation }}</div>
+                    </td>
+                    {% with r=case.result %}
+                    <td class="tc-status">
+                        {% if not r %}<span class="status-badge status-pending">not run</span>
+                        {% elif r.status == 'completed' %}<span class="status-badge status-completed" title="Ran {{ r.ran_at }}">done · {{ r.ran_at }}</span>
+                        {% else %}<span class="status-badge status-failed" title="{{ r.error }}">failed · {{ r.ran_at }}</span>{% endif %}
+                    </td>
+                    <td class="num tc-original">{% if r.status == 'completed' %}{{ r.original_ms|ms }}{% else %}–{% endif %}</td>
+                    <td class="num tc-best">{% if r.status == 'completed' %}{{ r.best_ms|ms }}{% else %}–{% endif %}</td>
+                    <td class="num tc-gain">{% if r.status == 'completed' %}{{ r.gain|signed_percent }}{% else %}–{% endif %}</td>
+                    <td class="tc-verdict">{% if not r %}–{% elif r.status == 'completed' %}{{ r.verdict_label }}{% else %}{{ r.error|truncatechars:140 }}{% endif %}</td>
+                    <td class="tc-action">
+                        <button class="btn-icon-only tc-run" title="Run this case" aria-label="Run {{ case.title }}"
+                                {% if password_expired %}disabled{% endif %}>
+                            <svg viewBox="0 0 24 24" fill="currentColor" stroke="none">
+                                <polygon points="6 4 20 12 6 20 6 4" />
+                            </svg>
+                        </button>
+                        {% if r %}
+                        <a class="btn-icon-only btn-icon-report {% if r.status != 'completed' %}is-failed{% endif %}" href="{{ r.results_url }}"
+                           title="{% if r.status == 'completed' %}Open the report{% else %}{{ r.error }}{% endif %}"
+                           aria-label="Open the report for {{ case.title }}">
+                            {% if r.status == 'completed' %}
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="13" y2="17"/></svg>
+                            {% else %}
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+                            {% endif %}
+                        </a>
+                        {% endif %}
+                    </td>
+                    {% endwith %}
+                </tr>
+                <tr class="tc-detail" id="detail-{{ case.slug }}" hidden>
+                    <td colspan="8">
+                        <div class="tc-detail-grid">
+                            <div class="tc-detail-sql">
+                                <div class="tc-detail-head">
+                                    <span class="stat-label">Query</span>
+                                    <button class="btn btn-sm btn-ghost tc-copy">Copy</button>
+                                </div>
+                                <pre class="tc-sql">{{ case.query }}</pre>
+                            </div>
+                            <div class="tc-detail-text">
+                                <span class="stat-label">Why it's slow, and what fixes it</span>
+                                <p>{{ case.explanation }}</p>
+                                <span class="stat-label">Expected outcome</span>
+                                <p>{{ case.expectation }}</p>
+                                <p class="card-description">
+                                    Reads {{ case.tables|join:", " }}{% if case.requires %} · needs the <code>{{ case.requires }}</code> extension{% endif %}
+                                </p>
+                                <div class="tc-detail-actions">
+                                    <button class="btn btn-sm btn-primary tc-run-detail" {% if password_expired %}disabled{% endif %}>
+                                        <svg class="btn-icon" viewBox="0 0 24 24" fill="currentColor" stroke="none"><polygon points="6 4 20 12 6 20 6 4" /></svg>
+                                        Run this case
+                                    </button>
+                                    <a class="btn btn-sm btn-secondary" href="{% url 'advisor:explorer' %}?c={{ selected.id }}&kind=query&sql={{ case.query|urlencode }}">Open in Query tool</a>
+                                    <a class="btn btn-sm btn-secondary" href="{% url 'advisor:analyze_query' selected.id %}?query={{ case.query|urlencode }}">Analyze</a>
+                                </div>
+                            </div>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Running overlay: the former look, with the live progress shown as lyrics -->
+<div class="loading-overlay" id="run-overlay" style="display: none;">
+    <div class="loading-content loading-content-wide">
+        <div class="loading-spinner"></div>
+        <h3><span id="overlay-title">Running test case</span> <span class="lp-clock" data-lp="clock">0:00</span></h3>
+        <div class="loading-sql-head" id="overlay-case"></div>
+        <pre class="loading-sql" id="overlay-sql"></pre>
+        {% include 'advisor/_progress_steps.html' %}
+        <div class="loading-progress" id="overlay-progress">
+            <div class="loading-progress-bar"><span id="overlay-bar" style="width: 0%"></span></div>
+            <span class="loading-meta" id="overlay-counts"></span>
+        </div>
+        <div class="loading-actions">
+            <button id="stop" class="btn btn-secondary">Stop after this case</button>
+        </div>
+    </div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block extra_js %}
+{% if selected %}
+<script src="{% static 'js/progress-overlay.js' %}"></script>
+<script>
+    const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]').value;
+    const connectionSelect = document.getElementById('connection');
+    const runAll = document.getElementById('run-all');
+    const stopButton = document.getElementById('stop');
+    const overlay = document.getElementById('run-overlay');
+    const live = ProgressOverlay.attach(overlay);
+    const PROGRESS_URL = "{% url 'advisor:api_analyze_progress' 'ID' %}";
+    const runSummary = document.getElementById('run-summary');
+    const rows = [...document.querySelectorAll('tr.tc-row')];
+    const REPORT_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="13" y2="17"/></svg>';
+    const FAILED_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>';
+    let running = false;
+    let stopRequested = false;
+
+    connectionSelect.addEventListener('change', () => {
+        window.location.search = '?connection=' + encodeURIComponent(connectionSelect.value);
+    });
+
+    function cell(row, name) { return row.querySelector('.tc-' + name); }
+    function detailOf(row) { return document.getElementById(row.getAttribute('aria-controls')); }
+
+    // Click a case (not its buttons) to show its SQL and explanation
+    function toggle(row, open) {
+        const detail = detailOf(row);
+        const willOpen = open !== undefined ? open : detail.hidden;
+        detail.hidden = !willOpen;
+        row.classList.toggle('is-open', willOpen);
+        row.setAttribute('aria-expanded', String(willOpen));
+    }
+
+    rows.forEach(row => {
+        row.addEventListener('click', event => {
+            if (event.target.closest('button, a')) return;
+            toggle(row);
+        });
+        row.addEventListener('keydown', event => {
+            if ((event.key === 'Enter' || event.key === ' ') && event.target === row) {
+                event.preventDefault();
+                toggle(row);
+            }
+        });
+        const detail = detailOf(row);
+        detail.querySelector('.tc-copy').addEventListener('click', event => {
+            const button = event.currentTarget;
+            navigator.clipboard.writeText(row.dataset.query).then(() => {
+                button.textContent = 'Copied';
+                setTimeout(() => { button.textContent = 'Copy'; }, 1200);
+            });
+        });
+        detail.querySelector('.tc-run-detail').addEventListener('click', () => runRows([row]));
+    });
+
+    function setStatus(row, state, label, title) {
+        const badge = document.createElement('span');
+        badge.className = 'status-badge status-' + state;
+        badge.textContent = label;
+        if (title) badge.title = title;
+        cell(row, 'status').replaceChildren(badge);
+    }
+
+    function ms(value) {
+        if (value === null || value === undefined) return '–';
+        return value >= 1000 ? (value / 1000).toFixed(2) + ' s' : value.toFixed(value < 10 ? 3 : 1) + ' ms';
+    }
+
+    function showOverlay(row, index, total, counts) {
+        document.getElementById('overlay-title').textContent = total > 1 ? `Running test case ${index + 1} of ${total}` : 'Running test case';
+        document.getElementById('overlay-case').textContent = row.dataset.title;
+        document.getElementById('overlay-sql').textContent = row.dataset.query;
+        document.getElementById('overlay-bar').style.width = (index / total * 100) + '%';
+        document.getElementById('overlay-counts').textContent = total > 1
+            ? `${counts.completed} completed · ${counts.failed} failed · ${counts.skipped} skipped` : '';
+        document.getElementById('overlay-progress').hidden = total <= 1;
+        overlay.style.display = 'flex';
+    }
+
+    function showResult(row, result) {
+        const action = cell(row, 'action');
+        if (result.status === 'completed') {
+            setStatus(row, 'completed', 'done in ' + Math.round(result.elapsed) + 's', 'Ran ' + result.ran_at);
+            cell(row, 'original').textContent = ms(result.original_ms);
+            cell(row, 'best').textContent = ms(result.best_ms);
+            cell(row, 'gain').textContent = result.gain === null || result.gain === undefined
+                ? '–' : (result.gain >= 0 ? '+' : '') + result.gain.toFixed(1) + '%';
+            cell(row, 'verdict').textContent = (result.verdict || 'not tested').replace('_', ' ');
+        } else if (result.status === 'skipped') {
+            setStatus(row, 'pending', 'skipped', result.error);
+            cell(row, 'verdict').textContent = result.error || '';
+        } else {
+            setStatus(row, 'failed', 'failed', result.error);
+            cell(row, 'verdict').textContent = (result.error || 'Unknown error').slice(0, 140);
+        }
+        const run = action.querySelector('.tc-run');
+        action.replaceChildren(run);
+        if (result.results_url) {
+            const ok = result.status === 'completed';
+            const link = document.createElement('a');
+            link.href = result.results_url;
+            link.className = 'btn-icon-only btn-icon-report' + (ok ? '' : ' is-failed');
+            link.title = ok ? 'Open the report' : (result.error || 'Open the report');
+            link.setAttribute('aria-label', 'Open the report for ' + row.dataset.title);
+            link.innerHTML = ok ? REPORT_ICON : FAILED_ICON;
+            action.appendChild(link);
+        }
+    }
+
+    async function runCase(row) {
+        setStatus(row, 'analyzing', 'running…');
+        const progressId = ProgressOverlay.newId();
+        live.start(PROGRESS_URL.replace('ID', progressId));
+        let result;
+        try {
+            const response = await fetch('{% url "advisor:api_test_case" %}', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrfToken},
+                body: JSON.stringify({case: row.dataset.case, connection_id: Number(connectionSelect.value),
+                                      progress_id: progressId}),
+            });
+            result = await response.json();
+        } catch (e) {
+            result = {status: 'failed', error: 'Tuning Buddy did not answer: ' + e.message};
+        } finally {
+            live.stop();
+        }
+        showResult(row, result);
+        return result;
+    }
+
+    function setRunning(value) {
+        running = value;
+        runAll.disabled = value;
+        connectionSelect.disabled = value;
+        stopButton.disabled = false;
+        stopButton.textContent = 'Stop after this case';
+        document.querySelectorAll('.tc-run, .tc-run-detail').forEach(b => { b.disabled = value; });
+    }
+
+    async function runRows(selected) {
+        if (running) return;
+        setRunning(true);
+        stopRequested = false;
+        stopButton.hidden = selected.length <= 1;
+        const counts = {completed: 0, failed: 0, skipped: 0};
+        for (let i = 0; i < selected.length && !stopRequested; i++) {
+            showOverlay(selected[i], i, selected.length, counts);
+            const result = await runCase(selected[i]);
+            counts[result.status === 'completed' ? 'completed' : result.status === 'skipped' ? 'skipped' : 'failed']++;
+        }
+        overlay.style.display = 'none';
+        if (selected.length > 1) {
+            const finished = counts.completed + counts.failed + counts.skipped;
+            runSummary.hidden = false;
+            runSummary.textContent = (stopRequested ? 'Stopped. ' : 'Finished. ') +
+                `${counts.completed} completed, ${counts.failed} failed, ${counts.skipped} skipped` +
+                (finished < selected.length ? `, ${selected.length - finished} not run.` : '.');
+        }
+        setRunning(false);
+    }
+
+    runAll.addEventListener('click', () => runRows(rows));
+    stopButton.addEventListener('click', () => {
+        stopRequested = true;
+        stopButton.disabled = true;
+        stopButton.textContent = 'Stopping after this case…';
+    });
+    rows.forEach(row => row.querySelector('.tc-run').addEventListener('click', () => runRows([row])));
+
+    // Leaving mid-run abandons the remaining cases (the current one still finishes and is saved)
+    window.addEventListener('beforeunload', event => {
+        if (running) { event.preventDefault(); event.returnValue = ''; }
+    });
+</script>
+{% endif %}
+{% endblock %}

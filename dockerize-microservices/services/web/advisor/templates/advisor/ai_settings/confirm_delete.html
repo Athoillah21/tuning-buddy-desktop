@@ -1,0 +1,32 @@
+{% extends 'advisor/base.html' %}
+
+{% block title %}Delete AI Provider{% endblock %}
+{% block page_title %}Delete AI Provider{% endblock %}
+
+{% block content %}
+<div class="form-container">
+    <div class="card card-danger">
+        <div class="card-content">
+            <div class="confirm-delete">
+                <div class="confirm-icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+                        <line x1="12" y1="9" x2="12" y2="13" />
+                        <line x1="12" y1="17" x2="12.01" y2="17" />
+                    </svg>
+                </div>
+                <h2>Delete "{{ provider.name }}"?</h2>
+                <p>
+                    {{ provider.provider_label }} &middot; {{ provider.model }}.
+                    If this is your only healthy provider, Tuning Buddy will be locked until another one passes its health check.
+                </p>
+                <form method="post" class="confirm-actions">
+                    {% csrf_token %}
+                    <a href="{% url 'advisor:ai_settings' %}" class="btn btn-ghost">Cancel</a>
+                    <button type="submit" class="btn btn-danger">Delete Provider</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,22 @@
+{# The steps of an analysis and its live progress as "lyrics"; driven by static/js/progress-overlay.js #}
+<div class="loading-steps lp-steps">
+    <div class="loading-step" data-phase="baseline">
+        <span class="step-icon"><span class="step-number">1</span><svg class="step-check" viewBox="0 0 24 24"><polyline points="5 12.5 10 17 19 7.5" /></svg></span>
+        <span class="step-text">Measure the query as it is</span>
+    </div>
+    <div class="loading-step" data-phase="ai">
+        <span class="step-icon"><span class="step-number">2</span><svg class="step-check" viewBox="0 0 24 24"><polyline points="5 12.5 10 17 19 7.5" /></svg></span>
+        <span class="step-text">Get AI recommendations</span>
+    </div>
+    <div class="loading-step" data-phase="testing">
+        <span class="step-icon"><span class="step-number">3</span><svg class="step-check" viewBox="0 0 24 24"><polyline points="5 12.5 10 17 19 7.5" /></svg></span>
+        <span class="step-text">Test each one on copies of the tables</span>
+    </div>
+    <div class="loading-step" data-phase="ranking">
+        <span class="step-icon"><span class="step-number">4</span><svg class="step-check" viewBox="0 0 24 24"><polyline points="5 12.5 10 17 19 7.5" /></svg></span>
+        <span class="step-text">Check the fit and rank the results</span>
+    </div>
+</div>
+<div class="lyrics" data-lp="lyrics" aria-live="polite">
+    <div class="lyrics-track"></div>
+</div>

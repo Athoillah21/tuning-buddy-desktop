@@ -1,0 +1,26 @@
+{% load explorer %}<div class="panel-header">
+    <div>
+        <h2 class="panel-title">Databases</h2>
+        <p class="card-description">Your PostgreSQL connections. Expand one in the tree to see its databases, schemas,
+            tables, views, functions, sequences and types, the way pgAdmin shows them. Click it to edit, test or
+            delete the connection.</p>
+    </div>
+    <div class="panel-actions">
+        <a class="btn btn-primary" data-nav href="{% explorer_href kind='connection_add' %}">Add connection</a>
+    </div>
+</div>
+{% if connections %}
+<div class="panel-cards">
+    {% for c in connections %}
+    <a class="panel-card" data-nav data-reveal href="{% explorer_href c=c.pk kind='server' %}">
+        <strong>{{ c.name }}</strong>
+        <span class="card-description">{{ c.database }}{% if c.pk == demo_connection_id %} · bundled demo{% endif %}</span>
+    </a>
+    {% endfor %}
+</div>
+{% else %}
+<div class="empty-state">
+    <p>No connections yet.</p>
+    <a class="btn btn-primary" data-nav href="{% explorer_href kind='connection_add' %}">Add your first connection</a>
+</div>
+{% endif %}

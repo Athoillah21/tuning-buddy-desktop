@@ -1,0 +1,36 @@
+{% load explorer %}{% include 'advisor/explorer/panels/_crumbs.html' with schema='' crumb_last='Query tool' %}
+<div class="query-tool" data-url="{% url 'advisor:api_explorer_query' connection.pk %}" data-database="{{ database }}"
+     data-host="{{ host }}" data-local="{% if is_local %}1{% else %}0{% endif %}">
+    <div class="panel-header">
+        <div>
+            <h2 class="panel-title">Query tool</h2>
+            <p class="card-description">{{ database }} on {{ connection.name }}
+                {% if not is_local %}· <span class="tag tag-warning" title="{{ host }}">remote server</span>{% endif %}</p>
+        </div>
+        <label class="write-switch" title="Allow INSERT, UPDATE, DELETE, CREATE and other changes">
+            <input type="checkbox" class="query-write-toggle">
+            <span class="write-switch-track"><span class="write-switch-thumb"></span></span>
+            Allow changes
+        </label>
+    </div>
+
+    <textarea class="console-editor query-editor" spellcheck="false" autocapitalize="off"
+              placeholder="SELECT * FROM my_table LIMIT 100;">{{ initial_sql }}</textarea>
+
+    <div class="console-toolbar">
+        <button class="btn btn-primary" data-run="">
+            <svg class="btn-icon" viewBox="0 0 24 24" fill="currentColor" stroke="none"><polygon points="6 4 20 12 6 20 6 4" /></svg>
+            Run
+        </button>
+        <button class="btn btn-secondary" data-run="EXPLAIN" title="Show the plan without running the query">Explain</button>
+        <button class="btn btn-secondary" data-run="EXPLAIN (ANALYZE, BUFFERS)" title="Run the query and show the real plan with timings">Explain analyze</button>
+        <label class="card-description">Rows
+            <select class="form-input query-limit" style="width: auto; display: inline-block; padding: 4px 8px;">
+                <option>100</option><option selected>500</option><option>1000</option>
+            </select>
+        </label>
+        <span class="console-status query-status">Read-only: one statement at a time, in a read-only transaction. Ctrl+Enter runs it, or just the selected part.</span>
+    </div>
+
+    <div class="query-output"></div>
+</div>

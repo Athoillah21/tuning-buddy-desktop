@@ -1,0 +1,609 @@
+{% extends 'advisor/base.html' %}
+
+{% block title %}Databases{% endblock %}
+{% block page_title %}Databases{% endblock %}
+
+{% block extra_css %}<style>.content { max-width: none; }</style>{% endblock %}
+
+{% block header_actions %}
+<div class="header-actions-group">
+<button class="btn btn-secondary" id="add-connection">
+    <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
+    </svg>
+    Add connection
+</button>
+<button class="btn btn-secondary" id="open-query-tool" disabled title="Open the query tool for the selected database">
+    <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <polyline points="4 17 10 11 4 5" />
+        <line x1="12" y1="19" x2="20" y2="19" />
+    </svg>
+    Query tool
+</button>
+</div>
+{% endblock %}
+
+{% block content %}
+{% csrf_token %}
+<div class="explorer" id="explorer">
+    <aside class="explorer-tree" id="tree-pane">
+        <div class="tree-toolbar">
+            <span class="tree-title">Servers</span>
+            <button class="tree-add" id="tree-add" title="Add a connection" aria-label="Add a connection">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                Add
+            </button>
+            <button class="tree-refresh" id="tree-refresh" title="Refresh the tree" aria-label="Refresh">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="23 4 23 10 17 10" />
+                    <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
+                </svg>
+            </button>
+        </div>
+        <ul class="tree" id="tree" role="tree"></ul>
+    </aside>
+    <div class="explorer-resizer" id="resizer" title="Drag to resize"></div>
+    <section class="explorer-panel" id="panel" aria-live="polite">
+        <div class="panel-loading"><div class="loading-spinner"></div></div>
+    </section>
+</div>
+
+<!-- Confirmation before the query tool changes a database -->
+<div class="modal-backdrop" id="write-modal" hidden>
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="write-modal-title">
+        <h3 id="write-modal-title">Run these changes?</h3>
+        <p id="write-modal-text"></p>
+        <div class="message message-error" id="write-modal-production" hidden>
+            <strong>This database is not on this computer.</strong> Only continue if it is a test or staging copy.
+            <label class="modal-check"><input type="checkbox" id="write-modal-confirm">
+                I confirm this is not a production database</label>
+        </div>
+        <div class="modal-actions">
+            <button class="btn btn-ghost" id="write-modal-cancel">Cancel</button>
+            <button class="btn btn-danger" id="write-modal-run">Run changes</button>
+        </div>
+    </div>
+</div>
+
+<!-- Confirmation before deleting a connection -->
+<div class="modal-backdrop" id="delete-modal" hidden>
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="delete-modal-title">
+        <h3 id="delete-modal-title">Delete this connection?</h3>
+        <p id="delete-modal-text"></p>
+        <div class="message message-error" id="delete-modal-error" hidden></div>
+        <div class="modal-actions">
+            <button class="btn btn-ghost" id="delete-modal-cancel">Cancel</button>
+            <button class="btn btn-danger" id="delete-modal-run">Delete</button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+    const PANEL_URL = "{% url 'advisor:explorer_panel' %}";
+    const TREE_URL = "{% url 'advisor:api_explorer_tree' %}";
+    const PAGE_URL = "{% url 'advisor:explorer' %}";
+    const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]').value;
+    const STATE_KEYS = ['c', 'db', 'schema', 'kind', 'name', 'oid', 'group', 'tab', 'sql'];
+    const GROUP_OF_KIND = {table: 'tables', view: 'views', materialized_view: 'materialized_views',
+                           function: 'functions', sequence: 'sequences', type: 'types'};
+    const ICONS = {
+        server: '<rect x="2" y="3" width="20" height="7" rx="2"/><rect x="2" y="14" width="20" height="7" rx="2"/><line x1="6" y1="6.5" x2="6.01" y2="6.5"/><line x1="6" y1="17.5" x2="6.01" y2="17.5"/>',
+        database: '<ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/>',
+        schema: '<path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>',
+        group: '<path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>',
+        table: '<rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/>',
+        view: '<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>',
+        materialized_view: '<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3" fill="currentColor"/>',
+        function: '<path d="M10 3H8a2 2 0 0 0-2 2v5l-2 2 2 2v5a2 2 0 0 0 2 2h2"/><path d="M14 3h2a2 2 0 0 1 2 2v5l2 2-2 2v5a2 2 0 0 1-2 2h-2"/>',
+        sequence: '<line x1="4" y1="9" x2="20" y2="9"/><line x1="4" y1="15" x2="20" y2="15"/><line x1="10" y1="3" x2="8" y2="21"/><line x1="16" y1="3" x2="14" y2="21"/>',
+        type: '<polyline points="4 7 4 4 20 4 20 7"/><line x1="9" y1="20" x2="15" y2="20"/><line x1="12" y1="4" x2="12" y2="20"/>',
+    };
+
+    const treeRoot = document.getElementById('tree');
+    const panel = document.getElementById('panel');
+    const queryButton = document.getElementById('open-query-tool');
+    let state = JSON.parse('{{ state_json|escapejs }}');
+    let panelRequest = 0;
+
+    // -----------------------------------------------------------------
+    // URL state and navigation
+    // -----------------------------------------------------------------
+    function clean(params) {
+        const result = {};
+        STATE_KEYS.forEach(key => { if (params[key] !== undefined && params[key] !== null && params[key] !== '') result[key] = String(params[key]); });
+        // The same default as the server: the deepest level the parameters name
+        if (!result.kind && result.c) {
+            result.kind = result.group ? 'group' : result.schema ? 'schema' : result.db ? 'database' : 'server';
+        }
+        return result;
+    }
+
+    function query(params) { return new URLSearchParams(clean(params)).toString(); }
+
+    async function navigate(params, push = true) {
+        state = clean(params);
+        if (push) history.pushState(state, '', PAGE_URL + (query(state) ? '?' + query(state) : ''));
+        queryButton.disabled = !state.c;
+        markSelected();
+        const request = ++panelRequest;
+        panel.classList.add('is-loading');
+        try {
+            const response = await fetch(PANEL_URL + '?' + query(state), {headers: {'X-Requested-With': 'XMLHttpRequest'}});
+            const html = await response.text();
+            if (request !== panelRequest) return;  // a newer click won
+            panel.innerHTML = response.ok ? html
+                : '<div class="message message-error">Could not open this item (HTTP ' + response.status + ').</div>';
+            initPanel(panel);
+        } catch (e) {
+            if (request === panelRequest) panel.innerHTML = '<div class="message message-error">Tuning Buddy did not answer: ' + e.message + '</div>';
+        } finally {
+            if (request === panelRequest) panel.classList.remove('is-loading');
+        }
+    }
+
+    window.addEventListener('popstate', event => navigate(event.state || {}, false));
+
+    // Links inside panels (tabs, table names, breadcrumbs) navigate without reloading the page
+    panel.addEventListener('click', event => {
+        const link = event.target.closest('a[data-nav]');
+        if (!link || event.ctrlKey || event.metaKey || event.shiftKey) return;
+        event.preventDefault();
+        const params = Object.fromEntries(new URL(link.href, location.href).searchParams);
+        navigate(params);
+        if (link.dataset.reveal !== undefined) revealPath(params);
+    });
+
+    queryButton.addEventListener('click', () => {
+        if (state.c) navigate({c: state.c, db: state.db, kind: 'query'});
+    });
+
+    // -----------------------------------------------------------------
+    // Connections: add, edit, test and delete without leaving the page
+    // -----------------------------------------------------------------
+    const addConnection = () => navigate({kind: 'connection_add'});
+    document.getElementById('add-connection').addEventListener('click', addConnection);
+    document.getElementById('tree-add').addEventListener('click', addConnection);
+
+    panel.addEventListener('submit', async event => {
+        const form = event.target.closest('form[data-panel-form]');
+        if (!form) return;
+        event.preventDefault();
+        const button = form.querySelector('button[type=submit]');
+        button.disabled = true;
+        try {
+            const response = await fetch(form.action, {
+                method: 'POST', body: new FormData(form), headers: {'X-Requested-With': 'XMLHttpRequest'},
+            });
+            if (response.ok) {
+                const result = await response.json();
+                await loadRoot();
+                await navigate({c: result.c, kind: 'server'});
+                await revealPath({c: result.c});
+                return;
+            }
+            panel.innerHTML = await response.text();  // the form again, with its errors
+            initPanel(panel);
+        } catch (e) {
+            button.disabled = false;
+            alertInPanel('Could not save: ' + e.message);
+        }
+    });
+
+    panel.addEventListener('click', async event => {
+        const test = event.target.closest('[data-test-url]');
+        if (test) {
+            const result = panel.querySelector('[data-test-result]');
+            test.disabled = true;
+            result.className = 'connection-test-result';
+            result.textContent = 'Connecting…';
+            try {
+                const response = await fetch(test.dataset.testUrl, {
+                    method: 'POST', headers: {'X-CSRFToken': csrfToken, 'X-Requested-With': 'XMLHttpRequest'},
+                });
+                const data = await response.json();
+                result.classList.add(data.success ? 'is-ok' : 'is-error');
+                result.textContent = (data.success ? '✓ ' : '✕ ') + (data.message || '').split('\n')[0];
+                result.title = data.message || '';
+            } catch (e) {
+                result.classList.add('is-error');
+                result.textContent = '✕ ' + e.message;
+            } finally {
+                test.disabled = false;
+            }
+            return;
+        }
+        const remove = event.target.closest('[data-delete-url]');
+        if (remove) confirmDelete(remove.dataset.deleteUrl, remove.dataset.deleteName);
+    });
+
+    function alertInPanel(message) {
+        const box = el('div', 'message message-error', message);
+        panel.prepend(box);
+    }
+
+    function confirmDelete(url, name) {
+        const modal = document.getElementById('delete-modal');
+        const error = document.getElementById('delete-modal-error');
+        const run = document.getElementById('delete-modal-run');
+        document.getElementById('delete-modal-text').textContent =
+            `"${name}" will be removed from Tuning Buddy. The database itself is not touched.`;
+        error.hidden = true;
+        run.disabled = false;
+        modal.hidden = false;
+        const close = () => { modal.hidden = true; };
+        document.getElementById('delete-modal-cancel').onclick = close;
+        modal.onkeydown = e => { if (e.key === 'Escape') close(); };
+        run.onclick = async () => {
+            run.disabled = true;
+            try {
+                const response = await fetch(url, {
+                    method: 'POST', headers: {'X-CSRFToken': csrfToken, 'X-Requested-With': 'XMLHttpRequest'},
+                });
+                const data = await response.json();
+                if (!data.ok) throw new Error(data.error || 'Could not delete it.');
+                close();
+                await loadRoot();
+                navigate({});
+            } catch (e) {
+                error.textContent = e.message;
+                error.hidden = false;
+            }
+        };
+    }
+
+    // -----------------------------------------------------------------
+    // Tree
+    // -----------------------------------------------------------------
+    function nodeKey(params) {
+        return ['c', 'db', 'schema', 'group', 'kind', 'name', 'oid'].map(k => params[k] || '').join('|');
+    }
+
+    function paramsForClick(node) {
+        const params = Object.assign({}, node.params);
+        if (!params.kind) params.kind = node.kind;
+        return params;
+    }
+
+    function renderNode(node) {
+        const li = document.createElement('li');
+        li.className = 'tree-node';
+        li.setAttribute('role', 'treeitem');
+        li.dataset.key = nodeKey(paramsForClick(node));
+        const row = document.createElement('div');
+        row.className = 'tree-row' + (node.muted ? ' is-muted' : '');
+        const caret = document.createElement('button');
+        caret.className = 'tree-caret';
+        caret.setAttribute('aria-label', 'Expand');
+        caret.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 6 15 12 9 18"/></svg>';
+        if (!node.expandable) caret.style.visibility = 'hidden';
+        const icon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+        icon.setAttribute('viewBox', '0 0 24 24');
+        icon.setAttribute('class', 'tree-icon tree-icon-' + node.kind);
+        icon.setAttribute('fill', 'none');
+        icon.setAttribute('stroke', 'currentColor');
+        icon.setAttribute('stroke-width', '2');
+        icon.innerHTML = ICONS[node.kind] || ICONS.table;
+        const label = document.createElement('span');
+        label.className = 'tree-label';
+        label.textContent = node.label;
+        label.title = node.label;
+        row.append(caret, icon, label);
+        if (node.count !== undefined) {
+            const count = document.createElement('span');
+            count.className = 'tree-count';
+            count.textContent = node.count;
+            row.appendChild(count);
+        } else if (node.meta) {
+            const meta = document.createElement('span');
+            meta.className = 'tree-meta';
+            meta.textContent = node.meta;
+            row.appendChild(meta);
+        }
+        li.appendChild(row);
+        li._node = node;
+
+        caret.addEventListener('click', event => { event.stopPropagation(); toggle(li); });
+        row.addEventListener('click', () => {
+            navigate(paramsForClick(node));
+            if (node.expandable && !li.classList.contains('is-open')) toggle(li);
+        });
+        return li;
+    }
+
+    async function loadChildren(params) {
+        const response = await fetch(TREE_URL + '?' + new URLSearchParams(
+            Object.fromEntries(Object.entries(params).filter(([k, v]) => ['c', 'db', 'schema', 'group'].includes(k) && v !== ''))));
+        const data = await response.json();
+        if (data.error) throw new Error(data.error);
+        return data.children;
+    }
+
+    async function toggle(li, open) {
+        const willOpen = open !== undefined ? open : !li.classList.contains('is-open');
+        if (!willOpen) { li.classList.remove('is-open'); return; }
+        li.classList.add('is-open');
+        if (li._loaded) return;
+        li._loaded = true;
+        const list = document.createElement('ul');
+        list.className = 'tree';
+        list.setAttribute('role', 'group');
+        list.innerHTML = '<li class="tree-loading">Loading…</li>';
+        li.appendChild(list);
+        try {
+            const children = await loadChildren(li._node.params);
+            list.replaceChildren(...children.map(renderNode));
+            if (!children.length) list.innerHTML = '<li class="tree-empty">Empty</li>';
+            markSelected();
+        } catch (e) {
+            li._loaded = false;
+            list.innerHTML = '';
+            const error = document.createElement('li');
+            error.className = 'tree-error';
+            error.textContent = e.message;
+            list.appendChild(error);
+        }
+    }
+
+    function findNode(container, predicate) {
+        return [...container.children].find(li => li._node && predicate(li._node.params, li._node));
+    }
+
+    // Open the tree along the path to the current selection: server > database > schema > group
+    async function revealPath(target) {
+        let li = findNode(treeRoot, p => String(p.c) === String(target.c));
+        if (!li) return;
+        await toggle(li, true);
+        if (!target.db) return;
+        li = findNode(li.querySelector(':scope > ul'), p => p.db === target.db);
+        if (!li) return;
+        await toggle(li, true);
+        if (!target.schema) return;
+        li = findNode(li.querySelector(':scope > ul'), p => p.schema === target.schema);
+        if (!li) return;
+        await toggle(li, true);
+        const group = target.group || GROUP_OF_KIND[target.kind];
+        if (!group) return;
+        li = findNode(li.querySelector(':scope > ul'), p => p.group === group);
+        if (li && li._node.expandable) await toggle(li, true);
+        markSelected();
+    }
+
+    function markSelected() {
+        const key = nodeKey(Object.assign({kind: state.kind}, state));
+        treeRoot.querySelectorAll('.tree-row.is-selected').forEach(row => row.classList.remove('is-selected'));
+        const match = [...treeRoot.querySelectorAll('.tree-node')].find(li => li.dataset.key === key);
+        if (match) {
+            match.querySelector(':scope > .tree-row').classList.add('is-selected');
+        }
+    }
+
+    async function loadRoot() {
+        treeRoot.innerHTML = '<li class="tree-loading">Loading…</li>';
+        const children = await loadChildren({});
+        treeRoot.replaceChildren(...children.map(renderNode));
+        if (!children.length) treeRoot.innerHTML = '<li class="tree-empty">No connections yet</li>';
+    }
+
+    document.getElementById('tree-refresh').addEventListener('click', async () => {
+        await loadRoot();
+        await revealPath(state);
+    });
+
+    // Resizable tree pane; the width is remembered per viewer
+    (function () {
+        const pane = document.getElementById('tree-pane');
+        const resizer = document.getElementById('resizer');
+        try {
+            const saved = parseInt(localStorage.getItem('tb.explorerTreeWidth'), 10);
+            if (saved >= 200 && saved <= 700) pane.style.width = saved + 'px';
+        } catch (e) { /* storage unavailable */ }
+        resizer.addEventListener('pointerdown', event => {
+            const startX = event.clientX, startWidth = pane.getBoundingClientRect().width;
+            resizer.setPointerCapture(event.pointerId);
+            const move = e => { pane.style.width = Math.min(700, Math.max(200, startWidth + e.clientX - startX)) + 'px'; };
+            const up = () => {
+                resizer.removeEventListener('pointermove', move);
+                try { localStorage.setItem('tb.explorerTreeWidth', parseInt(pane.style.width, 10)); } catch (e) { /* ignore */ }
+            };
+            resizer.addEventListener('pointermove', move);
+            resizer.addEventListener('pointerup', up, {once: true});
+        });
+    })();
+
+    // -----------------------------------------------------------------
+    // Panel behaviour: sortable tables, copy buttons, the query tool
+    // -----------------------------------------------------------------
+    function initPanel(root) {
+        root.querySelectorAll('.sortable-table').forEach(initSortable);
+        root.querySelectorAll('[data-copy]').forEach(button => button.addEventListener('click', () => {
+            const source = root.querySelector(button.dataset.copy);
+            navigator.clipboard.writeText(source.textContent).then(() => {
+                const text = button.textContent;
+                button.textContent = 'Copied';
+                setTimeout(() => { button.textContent = text; }, 1200);
+            });
+        }));
+        const tool = root.querySelector('.query-tool');
+        if (tool) initQueryTool(tool);
+    }
+
+    function initSortable(table) {
+        table.querySelectorAll('th.sortable').forEach((th, column) => {
+            th.addEventListener('click', () => {
+                const descending = !th.classList.contains('sorted-desc');
+                table.querySelectorAll('th').forEach(h => h.classList.remove('sorted-asc', 'sorted-desc'));
+                th.classList.add(descending ? 'sorted-desc' : 'sorted-asc');
+                const numeric = th.dataset.type === 'num';
+                const body = table.tBodies[0];
+                const rows = Array.from(body.rows).filter(row => row.cells.length > 1);
+                rows.sort((a, b) => {
+                    let x = a.cells[column].dataset.value || '', y = b.cells[column].dataset.value || '';
+                    if (numeric) { x = parseFloat(x) || 0; y = parseFloat(y) || 0; }
+                    const order = numeric ? x - y : x.localeCompare(y);
+                    return descending ? -order : order;
+                });
+                rows.forEach(row => body.appendChild(row));
+            });
+        });
+    }
+
+    function el(tag, className, text) {
+        const node = document.createElement(tag);
+        if (className) node.className = className;
+        if (text !== undefined) node.textContent = text;
+        return node;
+    }
+
+    function resultGrid(result) {
+        const isPlan = result.columns.length === 1 && result.columns[0].name === 'QUERY PLAN';
+        if (isPlan) {
+            return el('pre', 'plan-output', result.rows.map(row => row[0]).join('\n'));
+        }
+        const scroll = el('div', 'table-scroll');
+        const table = el('table', 'data-table data-grid');
+        const head = table.createTHead().insertRow();
+        result.columns.forEach(column => head.appendChild(el('th', '', column.name)));
+        const body = table.createTBody();
+        result.rows.forEach(row => {
+            const tr = body.insertRow();
+            row.forEach(value => {
+                const td = tr.insertCell();
+                if (value === null) { td.className = 'cell-null'; td.textContent = 'NULL'; }
+                else { td.textContent = typeof value === 'object' ? JSON.stringify(value) : String(value); td.title = td.textContent; }
+            });
+        });
+        scroll.appendChild(table);
+        return scroll;
+    }
+
+    // Resolves true when the user confirms the write (and, for a remote server, that it is not production)
+    function confirmWrite(tool, sql) {
+        const modal = document.getElementById('write-modal');
+        const remote = tool.dataset.local !== '1';
+        const count = sql.split(';').filter(part => part.trim()).length;
+        document.getElementById('write-modal-text').textContent =
+            `This runs ${count > 1 ? 'the script' : 'the statement'} on "${tool.dataset.database}" at ${tool.dataset.host} ` +
+            'as one transaction. It is committed only if every statement succeeds.';
+        const production = document.getElementById('write-modal-production');
+        const check = document.getElementById('write-modal-confirm');
+        const runButton = document.getElementById('write-modal-run');
+        production.hidden = !remote;
+        check.checked = false;
+        runButton.disabled = remote;
+        check.onchange = () => { runButton.disabled = remote && !check.checked; };
+        modal.hidden = false;
+        return new Promise(resolve => {
+            const close = answer => { modal.hidden = true; resolve(answer); };
+            document.getElementById('write-modal-cancel').onclick = () => close(false);
+            runButton.onclick = () => close(true);
+            modal.onkeydown = event => { if (event.key === 'Escape') close(false); };
+        });
+    }
+
+    function initQueryTool(tool) {
+        const editor = tool.querySelector('.query-editor');
+        const status = tool.querySelector('.query-status');
+        const output = tool.querySelector('.query-output');
+        const writeToggle = tool.querySelector('.query-write-toggle');
+        const buttons = tool.querySelectorAll('[data-run]');
+
+        writeToggle.addEventListener('change', () => {
+            tool.classList.toggle('is-write', writeToggle.checked);
+            status.textContent = writeToggle.checked
+                ? 'Changes allowed: scripts run as one transaction, after you confirm.'
+                : 'Read-only: one statement at a time, in a read-only transaction.';
+        });
+
+        async function run(prefix) {
+            const selected = editor.value.substring(editor.selectionStart, editor.selectionEnd).trim();
+            let sql = (selected || editor.value).trim();
+            if (!sql) return;
+            if (prefix) sql = prefix + ' ' + sql.replace(/;\s*$/, '');
+            const write = writeToggle.checked && !prefix;
+            let confirmed = false;
+            if (write) {
+                confirmed = await confirmWrite(tool, sql);
+                if (!confirmed) return;
+            }
+            buttons.forEach(b => { b.disabled = true; });
+            status.textContent = 'Running…';
+            output.replaceChildren();
+            try {
+                const response = await fetch(tool.dataset.url, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrfToken, 'X-Requested-With': 'XMLHttpRequest'},
+                    body: JSON.stringify({sql: sql, db: tool.dataset.database, limit: tool.querySelector('.query-limit').value,
+                                          mode: write ? 'write' : 'read', confirm_not_production: confirmed}),
+                });
+                const data = await response.json();
+                if (!data.success) {
+                    status.textContent = 'Failed';
+                    let message = data.error || 'The query failed.';
+                    if (data.rolled_back) {
+                        message = `Statement ${data.statement_index + 1} of ${data.statement_count} failed, so nothing was changed ` +
+                                  `(the whole script was rolled back).\n\n` + message;
+                    }
+                    output.replaceChildren(el('div', 'message message-error console-error', message));
+                    return;
+                }
+                if (data.mode === 'write') {
+                    const list = el('div', 'write-results');
+                    data.results.forEach((result, i) => {
+                        const line = el('div', 'write-result');
+                        line.append(el('span', 'tag tag-accent', result.command || 'OK'),
+                                    el('code', '', result.statement.length > 120 ? result.statement.slice(0, 120) + '…' : result.statement),
+                                    el('span', 'card-description', `${result.duration_ms} ms`));
+                        list.appendChild(line);
+                    });
+                    status.textContent = `Committed ${data.results.length} statement${data.results.length === 1 ? '' : 's'} in ${data.duration_ms} ms`;
+                    output.replaceChildren(list);
+                    const last = [...data.results].reverse().find(result => result.columns.length);
+                    if (last) output.appendChild(resultGrid(last));
+                    return;
+                }
+                if (!data.columns.length) {
+                    status.textContent = `Done in ${data.duration_ms} ms`;
+                    output.replaceChildren(el('div', 'message message-success', 'The statement returned no rows.'));
+                    return;
+                }
+                status.textContent = `${data.row_count} row${data.row_count === 1 ? '' : 's'} in ${data.duration_ms} ms`
+                    + (data.truncated ? ` · cut at ${data.row_count}; add LIMIT or raise the row limit` : '');
+                output.replaceChildren(resultGrid(data));
+            } catch (error) {
+                status.textContent = 'Failed';
+                output.replaceChildren(el('div', 'message message-error', 'Could not reach Tuning Buddy: ' + error.message));
+            } finally {
+                buttons.forEach(b => { b.disabled = false; });
+            }
+        }
+
+        buttons.forEach(button => button.addEventListener('click', () => run(button.dataset.run)));
+        editor.addEventListener('keydown', event => {
+            if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') { event.preventDefault(); run(''); }
+            if (event.key === 'Tab') { event.preventDefault(); editor.setRangeText('    ', editor.selectionStart, editor.selectionEnd, 'end'); }
+        });
+        editor.focus();
+    }
+
+    // -----------------------------------------------------------------
+    // Start
+    // -----------------------------------------------------------------
+    (async function () {
+        history.replaceState(clean(state), '', location.href);
+        queryButton.disabled = !state.c;
+        navigate(state, false);
+        try {
+            await loadRoot();
+            await revealPath(state);
+        } catch (e) {
+            treeRoot.innerHTML = '';
+            const error = el('li', 'tree-error', e.message);
+            treeRoot.appendChild(error);
+        }
+    })();
+})();
+</script>
+{% endblock %}

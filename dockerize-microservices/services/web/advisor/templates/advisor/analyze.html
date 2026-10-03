@@ -1,0 +1,116 @@
+{% extends 'advisor/base.html' %}
+
+{% block title %}Analyze Query{% endblock %}
+{% block page_title %}Analyze Query{% endblock %}
+
+{% block content %}
+<div class="analyze-container">
+    <div class="connection-badge">
+        <svg class="badge-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <ellipse cx="12" cy="5" rx="9" ry="3" />
+            <path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3" />
+            <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5" />
+        </svg>
+        <span>{{ connection.name }}</span>
+        <span class="badge-separator">•</span>
+        <span class="badge-db">{{ connection.database }}</span>
+    </div>
+
+    <div class="card">
+        <div class="card-content">
+            <form method="post" class="analyze-form" id="analyzeForm">
+                {% csrf_token %}
+
+                <div class="form-group">
+                    <label for="id_query" class="form-label">SQL Query</label>
+                    <div class="code-editor-wrapper">
+                        {{ form.query }}
+                    </div>
+                    {% if form.query.errors %}
+                    <span class="form-error">{{ form.query.errors.0 }}</span>
+                    {% endif %}
+                    <span class="form-hint">{{ form.query.help_text }}</span>
+                </div>
+
+                <div class="form-group form-checkbox-group">
+                    {{ form.test_recommendations }}
+                    <label for="id_test_recommendations" class="checkbox-label">
+                        Test recommendations with temporary tables
+                        <span class="checkbox-hint">{{ form.test_recommendations.help_text }}</span>
+                    </label>
+                </div>
+
+                {% if remote_host %}
+                <div class="form-group form-checkbox-group">
+                    {{ form.confirm_remote }}
+                    <label for="id_confirm_remote" class="checkbox-label">
+                        Copy the tables on {{ remote_host }}
+                        <span class="checkbox-hint">Testing makes full copies of the tables this query reads in a
+                            temporary schema on that server, and removes them afterwards. That takes disk space and
+                            load there: don't do it on a busy production server.</span>
+                    </label>
+                    {% if form.confirm_remote.errors %}<span class="form-error">{{ form.confirm_remote.errors.0 }}</span>{% endif %}
+                </div>
+                {% endif %}
+
+                <p class="form-hint privacy-note">Sent to your AI provider: this query, its execution plan, and the names,
+                    columns, indexes and row counts of the tables it reads. Never the rows themselves.</p>
+
+                <div class="form-actions">
+                    <a href="{% url 'advisor:explorer' %}?c={{ connection.pk }}&kind=server" class="btn btn-ghost">Cancel</a>
+                    <button type="submit" class="btn btn-primary btn-lg" id="analyzeBtn">
+                        <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+                        </svg>
+                        Analyze Query
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Loading State: the former look, with the live progress shown as lyrics -->
+    <div class="loading-overlay" id="loadingOverlay" style="display: none;">
+        <div class="loading-content loading-content-wide">
+            <div class="loading-spinner"></div>
+            <h3>Analyzing your query <span class="lp-clock" data-lp="clock">0:00</span></h3>
+            {% include 'advisor/_progress_steps.html' %}
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+{% load static %}
+<script src="{% static 'js/progress-overlay.js' %}"></script>
+<script>
+    const form = document.getElementById('analyzeForm');
+    const overlay = document.getElementById('loadingOverlay');
+    const progress = ProgressOverlay.attach(overlay);
+
+    form.addEventListener('submit', function () {
+        // The analysis runs inside this request; its id lets the overlay follow it live
+        const id = ProgressOverlay.newId();
+        let field = form.querySelector('input[name=progress_id]');
+        if (!field) {
+            field = document.createElement('input');
+            field.type = 'hidden';
+            field.name = 'progress_id';
+            form.appendChild(field);
+        }
+        field.value = id;
+        overlay.style.display = 'flex';
+        document.getElementById('analyzeBtn').disabled = true;
+        progress.start("{% url 'advisor:api_analyze_progress' 'ID' %}".replace('ID', id));
+    });
+
+    // Back from the results page: don't leave the overlay up
+    window.addEventListener('pageshow', event => {
+        if (event.persisted) {
+            progress.stop();
+            overlay.style.display = 'none';
+            document.getElementById('analyzeBtn').disabled = false;
+        }
+    });
+</script>
+{% endblock %}
