@@ -2759,6 +2759,3 @@ body {
 .reveal-password { display: inline-block; margin-left: 8px; }
 .reveal-password summary { cursor: pointer; color: var(--accent); font-size: 0.85rem; }
 .reveal-password code { display: block; margin-top: 4px; user-select: all; }
-
-/* What goes to the AI provider */
-.privacy-note { margin: 4px 0 14px; max-width: 720px; }

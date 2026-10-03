@@ -53,8 +53,6 @@
                 </div>
                 {% endif %}
 
-                <p class="form-hint privacy-note">Sent to your AI provider: this query, its execution plan, and the names,
-                    columns, indexes and row counts of the tables it reads. Never the rows themselves.</p>
 
                 <div class="form-actions">
                     <a href="{% url 'advisor:explorer' %}?c={{ connection.pk }}&kind=server" class="btn btn-ghost">Cancel</a>

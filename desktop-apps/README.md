@@ -264,7 +264,7 @@ Since 1.3.6:
 - **Setup's test switches** (`TB_SETUP_ENGINE_DIR`, `TB_SETUP_DEBUG_PORT`) only work when running from
   source; the built exes ignore them.
 - **What the AI provider sees:** the query, its execution plan, and the names, columns, indexes and row
-  counts of the tables it reads. It never sees the rows. The Analyze and AI Settings pages say so too.
+  counts of the tables it reads. It never sees the rows.
 - **Code signing:** `build.ps1 -SignCertThumbprint <thumbprint>` signs every exe, if you have a
   code-signing certificate. Without one, SmartScreen warns about an unknown publisher.
 

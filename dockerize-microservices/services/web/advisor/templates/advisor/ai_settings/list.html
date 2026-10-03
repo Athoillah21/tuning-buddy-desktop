@@ -27,9 +27,6 @@
 {% block content %}
 {% csrf_token %}
 
-<p class="form-hint privacy-note">What an analysis sends to the provider: the query, its execution plan, and the
-    names, columns, indexes and row counts of the tables it reads. Never the rows themselves. API keys are stored
-    encrypted and are only ever sent to the address they were saved for.</p>
 
 <div class="ai-readiness {% if status.ready %}ai-readiness-ready{% else %}ai-readiness-locked{% endif %}">
     <span class="ai-status-dot {% if status.ready %}ai-status-dot-ready{% else %}ai-status-dot-locked{% endif %}"></span>
