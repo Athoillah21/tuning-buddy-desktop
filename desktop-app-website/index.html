@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>Tuning Buddy: find out why a PostgreSQL query is slow</title>
+<meta name="description" content="Tuning Buddy for Windows. Paste a slow PostgreSQL query: it measures it, asks your AI provider for index and rewrite ideas, tests each one on a copy of the tables, and keeps only the ones that are measurably faster.">
+<link rel="icon" type="image/svg+xml" href="favicon.svg">
+<link rel="stylesheet" href="site.css">
+</head>
+<body>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <linearGradient id="g-tile" x1="0" y1="0" x2="1" y2="1"><stop offset="0"/><stop offset="1"/></linearGradient>
+    <symbol id="logo" viewBox="0 0 100 100">
+      <rect width="100" height="100" rx="23" fill="url(#g-tile)"/>
+      <path d="M24.02 71 A30 30 0 1 1 75.98 71" fill="none" stroke="#fff" stroke-width="7" stroke-linecap="round"/>
+      <line x1="50" y1="56" x2="73.4" y2="56" stroke="#fff" stroke-width="6.3" stroke-linecap="round" transform="rotate(-35 50 56)"/>
+      <circle cx="50" cy="56" r="5.6" fill="#fff"/>
+    </symbol>
+    <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 4v11m0 0l-4.5-4.5M12 15l4.5-4.5M5 19.5h14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><polyline points="5 12.5 10 17 19 7.5"/></symbol>
+    <symbol id="i-play" viewBox="0 0 24 24"><path d="M7.5 4.6v14.8L20 12z" fill="currentColor" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></symbol>
+  </defs>
+</svg>
+
+<div class="glow" aria-hidden="true"></div>
+
+<!-- One screen: what it is and the download on the left, the app at work on the right -->
+<main class="page">
+
+  <section class="intro">
+    <div class="brand">
+      <svg class="logo animate-needle" viewBox="0 0 100 100" aria-hidden="true">
+        <rect width="100" height="100" rx="23" fill="url(#g-tile)"/>
+        <path d="M24.02 71 A30 30 0 1 1 75.98 71" fill="none" stroke="#fff" stroke-width="7" stroke-linecap="round"/>
+        <g class="needle"><line x1="50" y1="56" x2="73.4" y2="56" stroke="#fff" stroke-width="6.3" stroke-linecap="round"/></g>
+        <circle cx="50" cy="56" r="5.6" fill="#fff"/>
+      </svg>
+      Tuning Buddy
+    </div>
+    <p class="pill"><i></i>Windows 10 and 11 · free and open source</p>
+    <h1>Find out why a PostgreSQL query is slow. <em>And how to make it fast.</em></h1>
+
+    <div class="cta">
+      <a class="primary" href="https://github.com/Athoillah21/tuning-buddy-desktop/releases/latest/download/TuningBuddySetup.exe">
+        <svg><use href="#i-download"/></svg>Download for Windows
+      </a>
+      <a class="ghost" href="guide.html"><svg><use href="#i-play"/></svg>See how it works</a>
+    </div>
+
+    <ul class="facts">
+      <li><svg><use href="#i-check"/></svg>Nothing else to install: no Python, Docker or PostgreSQL</li>
+      <li><svg><use href="#i-check"/></svg>Optional demo database (400 MB) to try it on</li>
+      <li><svg><use href="#i-check"/></svg>Works with Claude, Gemini, DeepSeek, OpenAI, or a local model</li>
+    </ul>
+
+    <p class="fine">The installer isn't code-signed yet: if SmartScreen appears, choose <strong>More info → Run anyway</strong>.
+      <a href="https://github.com/Athoillah21/tuning-buddy-desktop/releases">All releases</a> ·
+      <a href="https://github.com/Athoillah21/tuning-buddy-desktop">Source on GitHub</a></p>
+  </section>
+
+  <section class="demo" aria-label="A demonstration of one analysis">
+    <div class="window" id="demo" data-stage="paste">
+      <div class="titlebar">
+        <span class="titlebar-name"><svg class="mini-logo"><use href="#logo"/></svg>Tuning Buddy</span>
+        <span class="window-buttons">
+          <svg viewBox="0 0 12 12"><path d="M1.5 6h9"/></svg>
+          <svg viewBox="0 0 12 12"><rect x="2" y="2" width="8" height="8"/></svg>
+          <svg viewBox="0 0 12 12"><path d="M2 2l8 8M10 2l-8 8"/></svg>
+        </span>
+      </div>
+
+      <div class="app">
+        <div class="app-side">
+          <span>Dashboard</span><span class="on">Databases</span><span>History</span><span>Test Cases</span><span>AI Settings</span>
+        </div>
+
+        <div class="app-main">
+          <div class="scene scene-paste">
+            <h3>Analyze Query</h3>
+            <p class="badge">Demo database <span>•</span> shop</p>
+            <div class="card">
+              <span class="field-label">SQL Query</span>
+              <pre class="editor"><code id="sql"></code></pre>
+              <div class="actions"><span class="app-button" id="analyze-button">Analyze Query</span></div>
+            </div>
+          </div>
+
+          <div class="scene scene-results">
+            <h3>Optimization Results</h3>
+            <div class="compare">
+              <span>Original</span><span class="bar"><i></i></span><strong>201 ms</strong>
+              <span>With #1</span><span class="bar bar-new"><i></i></span><strong>5.8 ms</strong>
+            </div>
+            <div class="card card-best">
+              <p class="rec-head"><span class="tag tag-best">Best</span><strong>#1</strong><span class="tag">Index</span><span class="tag tag-ok">97% faster</span></p>
+              <pre class="code">CREATE INDEX idx_large_orders_customer_created
+  ON large_orders (customer_id, created_at DESC);</pre>
+              <ul class="checks">
+                <li>No existing index covers these columns</li>
+                <li>Measured size: 21 MB</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <!-- The Analyze overlay -->
+        <div class="overlay">
+          <div class="spinner"></div>
+          <h3>Analyzing your query <span class="clock" id="clock">0:00</span></h3>
+          <div class="steps" id="steps">
+            <div class="step"><span class="step-icon">1<svg class="step-check"><use href="#i-check"/></svg></span><span class="step-text">Measure the query as it is</span></div>
+            <div class="step"><span class="step-icon">2<svg class="step-check"><use href="#i-check"/></svg></span><span class="step-text">Get AI recommendations</span></div>
+            <div class="step"><span class="step-icon">3<svg class="step-check"><use href="#i-check"/></svg></span><span class="step-text">Test each one on copies of the tables</span></div>
+            <div class="step"><span class="step-icon">4<svg class="step-check"><use href="#i-check"/></svg></span><span class="step-text">Check the fit and rank the results</span></div>
+          </div>
+          <div class="lyrics" id="lyrics"><div class="lyrics-track"></div></div>
+        </div>
+
+        <!-- After the results: the way on to the guide -->
+        <div class="next" id="next">
+          <p class="next-kicker">That was one query.</p>
+          <h3>See the whole job, start to finish.</h3>
+          <ol class="chips" id="chips">
+            <li><a href="guide.html#1"><b>1</b>AI key</a></li>
+            <li><a href="guide.html#2"><b>2</b>Connect</a></li>
+            <li><a href="guide.html#3"><b>3</b>Dummy data</a></li>
+            <li><a href="guide.html#4"><b>4</b>Test query</a></li>
+            <li><a href="guide.html#5"><b>5</b>PDF report</a></li>
+          </ol>
+          <a class="next-go" href="guide.html"><svg><use href="#i-play"/></svg>Watch the 5-part guide</a>
+        </div>
+      </div>
+    </div>
+
+    <!-- What the app does, as lyrics in time with the window above -->
+    <div class="lyrics story" id="story" aria-hidden="true"><div class="lyrics-track"></div></div>
+    <p class="sr-only">Paste a slow PostgreSQL query. Tuning Buddy runs it with EXPLAIN ANALYZE, asks the AI provider you
+      choose for index and rewrite ideas, tests each idea on a temporary copy of your tables, and keeps only the ones
+      that are measurably faster. You get a report with the bottleneck and the before-and-after timings. Your rows stay
+      on your PC: the AI sees the query and its plan, never the data. Also inside: a database browser, a test-data
+      generator and 33 benchmark cases.</p>
+
+    <div class="dots" id="dots">
+      <button data-stage="paste" aria-label="Show step 1: paste a query"><i></i>Paste</button>
+      <button data-stage="analyze" aria-label="Show step 2: the analysis"><i></i>Analyze</button>
+      <button data-stage="results" aria-label="Show step 3: the results"><i></i>Results</button>
+      <button data-stage="guide" aria-label="Show what comes next: the guide"><i></i>Guide</button>
+    </div>
+  </section>
+
+</main>
+
+<script src="common.js"></script>
+<script src="site.js"></script>
+</body>
+</html>

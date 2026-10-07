@@ -1,0 +1,330 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>Tuning Buddy guide: from the AI key to the PDF report</title>
+<meta name="description" content="How a DBA uses Tuning Buddy, in five animated parts: add the AI key, connect a database, generate dummy data, test a slow query, and get the PDF report.">
+<link rel="icon" type="image/svg+xml" href="favicon.svg">
+<link rel="stylesheet" href="site.css">
+<link rel="stylesheet" href="guide.css">
+</head>
+<body>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <linearGradient id="g-tile" x1="0" y1="0" x2="1" y2="1"><stop offset="0"/><stop offset="1"/></linearGradient>
+    <symbol id="logo" viewBox="0 0 100 100">
+      <rect width="100" height="100" rx="23" fill="url(#g-tile)"/>
+      <path d="M24.02 71 A30 30 0 1 1 75.98 71" fill="none" stroke="#fff" stroke-width="7" stroke-linecap="round"/>
+      <line x1="50" y1="56" x2="73.4" y2="56" stroke="#fff" stroke-width="6.3" stroke-linecap="round" transform="rotate(-35 50 56)"/>
+      <circle cx="50" cy="56" r="5.6" fill="#fff"/>
+    </symbol>
+    <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 4v11m0 0l-4.5-4.5M12 15l4.5-4.5M5 19.5h14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><polyline points="5 12.5 10 17 19 7.5"/></symbol>
+  </defs>
+</svg>
+
+<div class="glow" aria-hidden="true"></div>
+
+<!-- One screen: the five parts on top, the part's steps on the left, the app doing them on the right -->
+<main class="guide">
+
+  <header class="topbar">
+    <a class="brand" href="index.html"><svg class="logo"><use href="#logo"/></svg>Tuning Buddy</a>
+    <nav class="parts" id="parts" aria-label="Parts of the guide"></nav>
+    <div class="controls">
+      <button class="ghost small" id="pause" aria-pressed="false">Pause</button>
+      <a class="primary small" href="https://github.com/Athoillah21/tuning-buddy-desktop/releases/latest/download/TuningBuddySetup.exe">
+        <svg><use href="#i-download"/></svg>Download
+      </a>
+    </div>
+  </header>
+
+  <div class="guide-body">
+
+    <section class="part-text" id="part-text" aria-live="polite"></section>
+
+    <section class="demo" aria-label="The app, doing the steps of this part">
+      <div class="window" id="win" data-stage="">
+        <div class="titlebar">
+          <span class="titlebar-name"><svg class="mini-logo"><use href="#logo"/></svg>Tuning Buddy</span>
+          <span class="window-buttons">
+            <svg viewBox="0 0 12 12"><path d="M1.5 6h9"/></svg>
+            <svg viewBox="0 0 12 12"><rect x="2" y="2" width="8" height="8"/></svg>
+            <svg viewBox="0 0 12 12"><path d="M2 2l8 8M10 2l-8 8"/></svg>
+          </span>
+        </div>
+
+        <div class="app">
+          <div class="app-side">
+            <span data-nav="dashboard">Dashboard</span><span data-nav="databases">Databases</span><span data-nav="history">History</span><span data-nav="tests">Test Cases</span><span data-nav="ai">AI Settings<i class="dot" id="ai-dot"></i></span>
+          </div>
+
+          <div class="app-main">
+
+            <!-- Part 1: AI Settings -->
+            <div class="scene g" data-scene="ai-list">
+              <div class="scene-head"><h3>AI Settings</h3><span class="app-button sm" id="ai-add">+ Add Provider</span></div>
+              <p class="banner" id="ai-banner"><i class="dot"></i><span id="ai-banner-text"></span></p>
+              <div class="card provider" id="ai-card">
+                <p class="provider-head"><strong>Claude</strong><span class="faint">Anthropic Claude</span><span class="tag tag-ok">healthy</span></p>
+                <p class="kv"><span>Model</span><code>claude-sonnet-5-5</code></p>
+                <p class="kv"><span>API key</span><code>sk-ant-…4f2a</code></p>
+                <p class="kv"><span>Last check</span><span>just now</span></p>
+              </div>
+            </div>
+
+            <div class="scene g" data-scene="ai-form">
+              <div class="scene-head"><h3>Add Provider</h3></div>
+              <div class="card">
+                <div class="fields">
+                  <div><span class="field-label">Name</span><span class="input" id="f-name"></span></div>
+                  <div><span class="field-label">Provider type</span><span class="input select" id="f-type"></span></div>
+                  <div><span class="field-label">Model</span><span class="input mono" id="f-model"></span></div>
+                  <div><span class="field-label">API key</span><span class="input mono" id="f-key"></span></div>
+                </div>
+                <p class="result-line" id="ai-result"></p>
+                <div class="actions"><span class="app-button outline" id="ai-test">Test connection</span><span class="app-button" id="ai-save">Save &amp; check</span></div>
+              </div>
+            </div>
+
+            <!-- Part 2: Databases -->
+            <div class="scene g" data-scene="db-form">
+              <div class="scene-head"><h3>Add connection</h3></div>
+              <div class="card">
+                <div class="fields">
+                  <div><span class="field-label">Connection name</span><span class="input" id="c-name"></span></div>
+                  <div><span class="field-label">Database name</span><span class="input mono" id="c-db"></span></div>
+                  <div><span class="field-label">Host</span><span class="input mono" id="c-host"></span></div>
+                  <div><span class="field-label">Port</span><span class="input mono" id="c-port"></span></div>
+                  <div><span class="field-label">Username</span><span class="input mono" id="c-user"></span></div>
+                  <div><span class="field-label">Password</span><span class="input mono" id="c-pass"></span></div>
+                </div>
+                <div class="actions"><span class="app-button" id="c-save">Save connection</span></div>
+              </div>
+            </div>
+
+            <div class="scene g" data-scene="db-tree">
+              <div class="scene-head"><h3>Databases</h3><span class="app-button sm" id="c-add">+ Add connection</span></div>
+              <div class="split">
+                <div class="card tree" id="tree">
+                  <span class="field-label">Servers</span>
+                  <p class="tree-empty" id="tree-empty">No connections yet</p>
+                  <p class="tree-row" style="--d:0">▾ Local copy</p>
+                  <p class="tree-row" style="--d:1">▾ tuning_copy</p>
+                  <p class="tree-row" id="tree-schema" style="--d:2">▾ public</p>
+                  <p class="tree-row" style="--d:3">▾ Tables <span class="faint">2</span></p>
+                  <p class="tree-row" style="--d:4">customers <span class="tag">empty</span></p>
+                  <p class="tree-row" style="--d:4">orders <span class="tag">empty</span></p>
+                </div>
+                <div class="card panel" id="schema-panel">
+                  <p class="provider-head"><strong>public</strong><span class="faint">schema in tuning_copy</span></p>
+                  <p class="kv"><span>Tables</span><span>2, both empty</span></p>
+                  <p class="kv"><span>Size</span><span>16 kB</span></p>
+                  <div class="actions"><span class="app-button sm" id="gen-open">Generate data</span></div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Part 3: Generate test data -->
+            <div class="scene g" data-scene="gen-form">
+              <div class="scene-head"><h3>Generate test data</h3><span class="faint">public in tuning_copy</span></div>
+              <div class="card">
+                <p class="grow ghead"><span></span><span>Table</span><span>Data to add</span><span>≈ Rows</span></p>
+                <p class="grow" id="g-row-c"><i class="box"></i><span><strong>customers</strong> <span class="tag">empty</span></span><span class="input" id="g-size-c"></span><span class="num" id="g-est-c">—</span></p>
+                <p class="grow" id="g-row-o"><i class="box"></i><span><strong>orders</strong> <span class="tag">empty</span></span><span class="input" id="g-size-o"></span><span class="num" id="g-est-o">—</span></p>
+                <p class="order-line" id="g-order"></p>
+                <div class="confirm-row">
+                  <div><span class="field-label">Type <code>tuning_copy</code> to confirm</span><span class="input mono" id="g-confirm"></span></div>
+                  <span class="app-button off" id="g-go">Generate data</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Part 4: Analyze, then the results (as on the landing page) -->
+            <div class="scene scene-paste">
+              <h3>Analyze Query</h3>
+              <p class="badge">Local copy <span>•</span> tuning_copy</p>
+              <div class="card">
+                <span class="field-label">SQL Query</span>
+                <pre class="editor"><code id="sql"></code></pre>
+                <div class="actions"><span class="app-button" id="analyze-button">Analyze Query</span></div>
+              </div>
+            </div>
+
+            <div class="scene scene-results">
+              <div class="scene-head"><h3>Optimization Results</h3><span class="app-button sm outline" id="pdf-button">Download PDF</span></div>
+              <div class="compare">
+                <span>Original</span><span class="bar"><i></i></span><strong>184 ms</strong>
+                <span>With #1</span><span class="bar bar-new"><i></i></span><strong>1.2 ms</strong>
+              </div>
+              <div class="card card-best">
+                <p class="rec-head"><span class="tag tag-best">Best</span><strong>#1</strong><span class="tag">Index</span><span class="tag tag-ok">99% faster</span></p>
+                <pre class="code">CREATE INDEX idx_orders_customer_created
+  ON orders (customer_id, created_at DESC);</pre>
+                <ul class="checks">
+                  <li>No existing index covers these columns</li>
+                  <li>Measured size: 118 MB</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+
+          <p class="toast" id="toast">tuning-buddy-report.pdf saved</p>
+
+          <!-- Part 3: the progress screen -->
+          <div class="cover" data-cover="gen">
+            <div class="spinner" id="gen-spinner"></div>
+            <h3 id="gen-title">Generating test data…</h3>
+            <div class="steps" id="gen-steps">
+              <div class="step"><span class="step-icon">1<svg class="step-check"><use href="#i-check"/></svg></span><span class="step-text">customers<small id="gd-c">waiting</small></span></div>
+              <div class="step"><span class="step-icon">2<svg class="step-check"><use href="#i-check"/></svg></span><span class="step-text">orders<small id="gd-o">waiting</small></span></div>
+              <div class="step"><span class="step-icon">3<svg class="step-check"><use href="#i-check"/></svg></span><span class="step-text">Analyze the tables<small id="gd-a">waiting</small></span></div>
+            </div>
+            <div class="pbar"><span id="gen-bar"></span></div>
+          </div>
+
+          <!-- Part 4: the Analyze overlay -->
+          <div class="overlay">
+            <div class="spinner"></div>
+            <h3>Analyzing your query <span class="clock" id="clock">0:00</span></h3>
+            <div class="steps" id="steps">
+              <div class="step"><span class="step-icon">1<svg class="step-check"><use href="#i-check"/></svg></span><span class="step-text">Measure the query as it is</span></div>
+              <div class="step"><span class="step-icon">2<svg class="step-check"><use href="#i-check"/></svg></span><span class="step-text">Get AI recommendations</span></div>
+              <div class="step"><span class="step-icon">3<svg class="step-check"><use href="#i-check"/></svg></span><span class="step-text">Test each one on copies of the tables</span></div>
+              <div class="step"><span class="step-icon">4<svg class="step-check"><use href="#i-check"/></svg></span><span class="step-text">Check the fit and rank the results</span></div>
+            </div>
+            <div class="lyrics" id="lyrics"><div class="lyrics-track"></div></div>
+          </div>
+
+          <!-- Part 5: the PDF report, worded and laid out as services/report/app/pdf_generator.py makes it -->
+          <div class="cover pdf" data-cover="pdf">
+            <p class="pdf-bar"><span>tuning-buddy-report.pdf</span><span id="pdf-page">1 / 3</span></p>
+            <div class="pdf-body">
+              <div class="pdf-thumbs" id="pdf-thumbs" aria-hidden="true"></div>
+              <div class="pdf-view" id="pdf-view">
+
+                <div class="sheet" data-page="1">
+                  <div data-b="figs">
+                    <p class="p-eyebrow">PostgreSQL performance analysis</p>
+                    <p class="p-title">Query Optimization Report</p>
+                    <p class="p-sub">Local copy&nbsp;&nbsp;|&nbsp;&nbsp;Analyzed 2026-10-07 14:32</p>
+                    <div class="p-figs">
+                      <p><span>Original runtime</span><b id="n-orig">184.00 ms</b></p>
+                      <p><span>Best tested runtime</span><b class="deep" id="n-best">1.20 ms</b></p>
+                      <p><span>Improvement</span><b class="good" id="n-gain">99.3%</b></p>
+                      <p><span>Recommendations</span><b id="n-recs">3</b></p>
+                    </div>
+                  </div>
+                  <div data-b="query">
+                    <p class="p-eye">The workload</p>
+                    <p class="p-h">Query under review</p>
+                    <pre class="p-code">SELECT * FROM orders WHERE customer_id = 42
+ORDER BY created_at DESC LIMIT 20;</pre>
+                  </div>
+                  <div data-b="action">
+                    <p class="p-eye">What to do</p>
+                    <p class="p-h">Recommended action</p>
+                    <div class="p-callout good">
+                      <p><b>Apply the indexes below.</b> Measured at 1.20 ms against 184.00 ms for the current query, a <b>99.3% reduction</b> in execution time.</p>
+                      <pre class="p-code sm">CREATE INDEX idx_orders_customer_created
+  ON orders (customer_id, created_at DESC);</pre>
+                    </div>
+                  </div>
+                  <div data-b="chart">
+                    <p class="p-eye">The numbers</p>
+                    <p class="p-h">Execution time by option</p>
+                    <div class="p-chart">
+                      <span>Current</span><p><i class="cur" style="--v:76.7%"></i><b>184.00 ms</b></p>
+                      <span>Option 1</span><p><i style="--v:0.5%"></i><b>1.20 ms</b></p>
+                      <span>Option 2</span><p><i style="--v:67.5%"></i><b>162.00 ms</b></p>
+                      <span>Option 3</span><p><i style="--v:40%"></i><b>96.00 ms</b></p>
+                      <span></span><p class="axis"><em>0</em><em>60</em><em>120</em><em>180</em><em>240</em></p>
+                    </div>
+                    <p class="p-src">EXPLAIN (ANALYZE) on the original query and on each tested recommendation. Lower is better.</p>
+                  </div>
+                  <p class="p-foot"><span>Tuning Buddy</span><span>1 / 3</span></p>
+                </div>
+
+                <div class="sheet is-after" data-page="2">
+                  <p class="p-run">Query Optimization Report</p>
+                  <div data-b="compare">
+                    <p class="p-eye">The evidence</p>
+                    <p class="p-h">Current plan versus recommended plan</p>
+                    <div class="p-table">
+                      <span></span><span>Current</span><span>Recommended</span>
+                      <span>Runtime</span><b>184.00 ms</b><b class="good">1.20 ms</b>
+                      <span>Access method</span><b>Sequential scan</b><b>Index scan</b>
+                      <span>Planner cost</span><b>98,412</b><b>24</b>
+                      <span>Rows read</span><b>4,100,000</b><b>20</b>
+                    </div>
+                  </div>
+                  <div data-b="flow">
+                    <p class="p-eye">Diagnosis</p>
+                    <p class="p-h">How the query executes today</p>
+                    <p class="p-legend"><i class="seq"></i>Sequential scan<i class="op"></i>Join / aggregate<i></i>Other</p>
+                    <div class="p-flow">
+                      <p class="node seq" style="--i:0"><em>Bottleneck</em><b>Seq Scan</b><span>orders</span><span class="stat">4,100,000 rows | 171.02 ms</span></p>
+                      <p class="arrow" style="--i:1"></p>
+                      <p class="node op" style="--i:2"><b>Sort</b><span>created_at DESC</span><span class="stat">20 rows | 183.61 ms</span></p>
+                      <p class="arrow" style="--i:3"></p>
+                      <p class="node" style="--i:4"><b>Limit</b><span>&nbsp;</span><span class="stat">20 rows | 183.94 ms</span></p>
+                    </div>
+                    <p class="p-src">Execution plan, read top to bottom: the scans run first and each step feeds the one below.</p>
+                  </div>
+                  <div data-b="diagnosis" class="p-callout">
+                    <p>The sequential scan reads all 4,100,000 rows of <b>orders</b> to return 20, and takes 93% of the time.</p>
+                  </div>
+                  <p class="p-foot"><span>Tuning Buddy</span><span>2 / 3</span></p>
+                </div>
+
+                <div class="sheet is-after" data-page="3">
+                  <p class="p-run">Query Optimization Report</p>
+                  <div data-b="verdict">
+                    <p class="p-eye">Option 1 of 3</p>
+                    <p class="p-h">Index on orders (customer_id, created_at)</p>
+                    <div class="p-table two">
+                      <span>Runtime</span><b class="good">1.20 ms</b>
+                      <span>Versus current</span><b class="good">99.3% faster</b>
+                      <span>Sequential scan</span><b>Eliminated</b>
+                      <span>Tuning iterations</span><b>1</b>
+                    </div>
+                    <p class="p-sub2">Indexes to apply</p>
+                    <pre class="p-code sm">CREATE INDEX idx_orders_customer_created
+  ON orders (customer_id, created_at DESC);</pre>
+                    <p class="p-sub2">Fit with this database</p>
+                    <p class="p-fit">No existing index covers these columns.</p>
+                    <p class="p-fit">Measured size: 118 MB, 24% of the table's 500 MB.</p>
+                  </div>
+                  <div data-b="planafter">
+                    <p class="p-sub2">Plan after this change</p>
+                    <p class="p-legend"><i class="idx"></i>Index scan<i></i>Other</p>
+                    <div class="p-flow">
+                      <p class="node idx" style="--i:0"><b>Index Scan</b><span>idx_orders_customer_created</span><span class="stat">20 rows | 0.94 ms</span></p>
+                      <p class="arrow" style="--i:1"></p>
+                      <p class="node" style="--i:2"><b>Limit</b><span>&nbsp;</span><span class="stat">20 rows | 1.01 ms</span></p>
+                    </div>
+                  </div>
+                  <p class="p-src">Tested on a temp-schema clone, with a colder cache than production. Recommendations by Claude, claude-sonnet-5-5.</p>
+                  <p class="p-foot"><span>Tuning Buddy</span><span>3 / 3</span></p>
+                </div>
+
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- What is happening, as lyrics in time with the window above -->
+      <div class="lyrics story" id="story" aria-hidden="true"><div class="lyrics-track"></div></div>
+    </section>
+
+  </div>
+</main>
+
+<script src="common.js"></script>
+<script src="guide.js"></script>
+</body>
+</html>

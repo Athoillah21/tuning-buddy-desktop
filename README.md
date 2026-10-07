@@ -55,6 +55,7 @@ and reports work.
 | `desktop-apps/setup_ui/` | The custom installer and uninstaller window |
 | `desktop-apps/installer/` | The Inno Setup script the installer runs silently |
 | `desktop-apps/build.ps1` | Builds the app, `TuningBuddySetup.exe` and `TuningBuddyUninstall.exe` |
+| `desktop-app-website/` | The download page: a static site with a demo of the app |
 
 The desktop app uses the services' code unchanged. `desktop-apps/stage.py` copies it in at build time.
 
